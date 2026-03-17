@@ -327,8 +327,8 @@
             color: #ff4d4f;
             /* red */
         }
-        </style>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 
 <body>
@@ -566,7 +566,7 @@
 
         window.onload = function () {
 
-            let dark = {{ config.dark_mode | tojson}};
+            let dark = {{ config.dark_mode | tojson }};
 
         if (!dark) {
             document.body.classList.add("light");
@@ -612,39 +612,26 @@
 
                     if (!data.lot) return;
 
-                    let lot = data.lot;
+                    console.log("🔍 Scanned:", data.lot);
 
-                    console.log("🔍 Scanned:", lot);
+                    // ✅ SHOW RESULT DIRECTLY
+                    let msg = document.createElement("div")
+                    msg.innerText = data.status
+                    msg.style.background = data.status_color
+                    msg.style.position = "fixed"
+                    msg.style.bottom = "20px"
+                    msg.style.right = "20px"
+                    msg.style.color = "white"
+                    msg.style.padding = "10px 16px"
+                    msg.style.borderRadius = "8px"
 
-                    // 👉 directly call your backend logic
-                    fetch("/scan_lot", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ lot: lot })
-                    })
-                    .then(r => r.json())
-                    .then(res => {
+                    document.body.appendChild(msg)
 
-                        let msg = document.createElement("div")
-                        msg.innerText = res.status
-                        msg.style.background = res.status_color
-                        msg.style.position = "fixed"
-                        msg.style.bottom = "20px"
-                        msg.style.right = "20px"
-                        msg.style.color = "white"
-                        msg.style.padding = "10px 16px"
-                        msg.style.borderRadius = "8px"
+                    setTimeout(() => msg.remove(), 2000)
 
-                        document.body.appendChild(msg)
-
-                        setTimeout(() => msg.remove(), 2000)
-
-                        loadLots(); // refresh table
-                    })
-
+                    loadLots(); // refresh table
                 })
         }
-
         // run every 300ms
         setInterval(pollScanner, 300);
 
@@ -662,8 +649,8 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ lot: lotNumber })
             })
-            .then(r => r.json())
-            .then(data => {
+                .then(r => r.json())
+                .then(data => {
                     let msg = document.createElement("div")
                     msg.innerText = data.status
                     msg.style.background = data.status_color
@@ -677,8 +664,8 @@
                     document.body.appendChild(msg)
 
                     setTimeout(() => msg.remove(), 2000)
-                loadLots();
-            });
+                    loadLots();
+                });
         }
 
         function loadLots() {
@@ -712,8 +699,8 @@
 
                         // icon
                         let alarmIcon = lot.isalarm
-                        ? '<i class="fa-solid fa-bell"></i> <i class="fa-solid fa-check"></i>'
-                        : '<i class="fa-solid fa-bell"></i>';
+                            ? '<i class="fa-solid fa-bell"></i> <i class="fa-solid fa-check"></i>'
+                            : '<i class="fa-solid fa-bell"></i>';
 
                         table.innerHTML += `
 <tr class="lot-row" data-status="${lot.status}">

@@ -15,42 +15,68 @@ CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 DATA_FILE = os.path.join(BASE_DIR, "data.json")
 
 last_mtime = 0
-scanner_data = ""   # 🔌 shared scanner buffer
+
+# 🔒 thread-safe scanner data
+scanner_data = ""
+scanner_lock = threading.Lock()
+
+# prevent duplicate spam
+last_scan = ""
+last_scan_time = 0
 
 SUCCESS_COLOR = "#16a34a"
 ERROR_COLOR = "#ef4444"
 
-# ---------- SERIAL READER THREAD ----------
+# ---------- SERIAL READER ----------
 
 def serial_reader():
-    global scanner_data
+    global scanner_data, last_scan, last_scan_time
 
-    try:
-        ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
-        print("📡 Scanner connected on /dev/ttyACM0")
+    while True:
+        try:
+            ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+            print("📡 Scanner connected")
 
-        buffer = ""
+            buffer = ""
 
-        while True:
-            if ser.in_waiting:
-                data = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
-                buffer += data
+            while True:
+                if ser.in_waiting:
+                    data = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+                    buffer += data
 
-                if '\n' in buffer or '\r' in buffer:
-                    lines = buffer.splitlines()
-                    for line in lines:
-                        if line.strip():
-                            scanner_data = line.strip()
-                            print("🔍 Scanned:", scanner_data)
-                    buffer = ""
+                    if '\n' in buffer or '\r' in buffer:
+                        lines = buffer.splitlines()
 
-            time.sleep(0.05)
+                        for line in lines:
+                            lot = line.strip()
+                            if not lot:
+                                continue
 
-    except Exception as e:
-        print("❌ Serial error:", e)
+                            now = time.time()
+
+                            # 🚫 prevent duplicate scan within 1 sec
+                            if lot == last_scan and (now - last_scan_time) < 1:
+                                continue
+
+                            last_scan = lot
+                            last_scan_time = now
+
+                            with scanner_lock:
+                                scanner_data = lot
+
+                            print("🔍 Scanned:", lot)
+
+                        buffer = ""
+
+                time.sleep(0.05)
+
+        except Exception as e:
+            print("❌ Serial error:", e)
+            print("🔄 Reconnecting in 2 sec...")
+            time.sleep(2)
 
 
-# ---------- Create files if missing ----------
+# ---------- FILE INIT ----------
 
 if not os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "w") as f:
@@ -65,7 +91,7 @@ if not os.path.exists(DATA_FILE):
         json.dump([], f, indent=4)
 
 
-# ---------- JSON helpers ----------
+# ---------- JSON ----------
 
 def load_json(file, default):
     try:
@@ -97,7 +123,7 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 
-# ---------- Auto reload config ----------
+# ---------- CONFIG AUTO RELOAD ----------
 
 def reload_config_if_changed():
     global last_mtime
@@ -121,9 +147,7 @@ def check_config():
 
 @app.route("/")
 def index():
-    lots = load_data()
-    config = load_config()
-    return render_template("index.html", lots=lots, config=config)
+    return render_template("index.html", config=load_config())
 
 
 @app.route("/api/settings")
@@ -149,20 +173,21 @@ def save_settings():
 
     except Exception as e:
         return jsonify({
-            "status": f"Error at line: {sys.exc_info()[-1].tb_lineno} {e}",
+            "status": f"Error line {sys.exc_info()[-1].tb_lineno}: {e}",
             "status_color": ERROR_COLOR
         })
 
 
-# ---------- 🔥 SCANNER API ----------
+# ---------- 🔥 SCAN API ----------
 
 @app.route("/api/scan")
 def api_scan():
     global scanner_data
 
     try:
-        lot = scanner_data
-        scanner_data = ""  # clear after read
+        with scanner_lock:
+            lot = scanner_data
+            scanner_data = ""
 
         if not lot:
             return jsonify({"lot": None})
@@ -171,13 +196,12 @@ def api_scan():
         config = load_config()
 
         # duplicate check
-        for l in lots:
-            if l["lot"] == lot:
-                return jsonify({
-                    "lot": lot,
-                    "status": f"⚠️ Lot {lot} already exists",
-                    "status_color": ERROR_COLOR
-                })
+        if any(l["lot"] == lot for l in lots):
+            return jsonify({
+                "lot": lot,
+                "status": f"⚠️ Lot {lot} already exists",
+                "status_color": ERROR_COLOR
+            })
 
         now = datetime.now()
 
@@ -202,7 +226,7 @@ def api_scan():
 
     except Exception as e:
         return jsonify({
-            "status": f"Error at line: {sys.exc_info()[-1].tb_lineno} {e}",
+            "status": f"Error line {sys.exc_info()[-1].tb_lineno}: {e}",
             "status_color": ERROR_COLOR
         })
 
@@ -214,8 +238,8 @@ def delete_lot():
         lot_to_delete = data.get("lot")
 
         lots = load_data()
-        new_lots = [lot for lot in lots if lot["lot"] != lot_to_delete]
-        save_data(new_lots)
+        lots = [lot for lot in lots if lot["lot"] != lot_to_delete]
+        save_data(lots)
 
         return jsonify({
             "status": f"🗑️ Lot {lot_to_delete} deleted",
@@ -224,15 +248,14 @@ def delete_lot():
 
     except Exception as e:
         return jsonify({
-            "status": f"Error at line: {sys.exc_info()[-1].tb_lineno} {e}",
+            "status": f"Error line {sys.exc_info()[-1].tb_lineno}: {e}",
             "status_color": ERROR_COLOR
         })
 
 
 @app.route("/api/lots")
 def api_lots():
-    lots = load_data()
-    return jsonify(process_lots(lots))
+    return jsonify(process_lots(load_data()))
 
 
 # ---------- PROCESS ----------
@@ -244,14 +267,9 @@ def process_lots(lots):
         alarm_time = datetime.strptime(lot["alarm"], "%Y-%m-%d %H:%M:%S")
         expire_time = datetime.strptime(lot["expire"], "%Y-%m-%d %H:%M:%S")
 
-        diff_sec = int((expire_time - now).total_seconds())
-        if diff_sec < 0:
-            diff_sec = 0
+        diff = max(0, int((expire_time - now).total_seconds()))
 
-        minutes = diff_sec // 60
-        seconds = diff_sec % 60
-
-        lot["remain_text"] = f"{minutes}m {seconds:02d}s"
+        lot["remain_text"] = f"{diff//60}m {diff%60:02d}s"
 
         if now >= expire_time:
             lot["status"] = "Expired"
@@ -269,7 +287,6 @@ if __name__ == "__main__":
     app.config.update(load_config())
     reload_config_if_changed()
 
-    # 🔌 START SERIAL THREAD
     threading.Thread(target=serial_reader, daemon=True).start()
 
     app.run(host="0.0.0.0", port=5000, debug=True)
