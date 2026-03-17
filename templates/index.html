@@ -344,9 +344,6 @@
             <div class="header-buttons">
                 <button class="btn-settings" onclick="toggleSettings()">⚙ Settings</button>
             </div>
-            <!-- <input id="lot" autofocus autocomplete="off" style="opacity:400; position:absolute;"> -->
-            <!-- <input id="lot" autofocus autocomplete="off" style="opacity:100; position:absolute; pointer-events:none;"> -->
-            <input id="lot" autofocus autocomplete="off" style="opacity:0; position:absolute; left:-9999px;">
 
         </div>
 
@@ -456,7 +453,6 @@
             if (modal.style.display === "block") {
 
                 modal.style.display = "none"
-                lotInput.focus()
 
             } else {
 
@@ -607,41 +603,50 @@
 
             })
         }
-        const lotInput = document.getElementById("lot")
 
-        lotInput.addEventListener("change", function () {
-
-            let lot = lotInput.value.trim()
-
-            if (lot === "") return
-
-            fetch("/scan_lot", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ lot: lot })
-            })
+        // 🔌 SERIAL SCANNER POLLING
+        function pollScanner() {
+            fetch("/api/scan")
                 .then(r => r.json())
                 .then(data => {
 
-                    let msg = document.createElement("div")
-                    msg.innerText = data.status
-                    msg.style.background = data.status_color
-                    msg.style.position = "fixed"
-                    msg.style.bottom = "20px"
-                    msg.style.right = "20px"
-                    msg.style.color = "white"
-                    msg.style.padding = "10px 16px"
-                    msg.style.borderRadius = "8px"
+                    if (!data.lot) return;
 
-                    document.body.appendChild(msg)
+                    let lot = data.lot;
 
-                    setTimeout(() => msg.remove(), 2000)
+                    console.log("🔍 Scanned:", lot);
 
-                    lotInput.value = ""      // clear input
-                    lotInput.focus()         // ready for next scan
+                    // 👉 directly call your backend logic
+                    fetch("/scan_lot", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ lot: lot })
+                    })
+                    .then(r => r.json())
+                    .then(res => {
+
+                        let msg = document.createElement("div")
+                        msg.innerText = res.status
+                        msg.style.background = res.status_color
+                        msg.style.position = "fixed"
+                        msg.style.bottom = "20px"
+                        msg.style.right = "20px"
+                        msg.style.color = "white"
+                        msg.style.padding = "10px 16px"
+                        msg.style.borderRadius = "8px"
+
+                        document.body.appendChild(msg)
+
+                        setTimeout(() => msg.remove(), 2000)
+
+                        loadLots(); // refresh table
+                    })
+
                 })
+        }
 
-        })
+        // run every 300ms
+        setInterval(pollScanner, 300);
 
         function deleteLot(lotNumber) {
 
@@ -675,17 +680,6 @@
                 loadLots();
             });
         }
-
-        /* keep focus for scanner */
-
-        lotInput.addEventListener("blur", () => {
-            setTimeout(() => {
-                let modal = document.getElementById("settingsModal")
-                if (modal.style.display !== "block") {
-                    lotInput.focus()
-                }
-            }, 100)
-        })
 
         function loadLots() {
 

@@ -1,7 +1,7 @@
 import serial
 import time
 
-PORT = '/dev/ttyUSB0'   # change if needed (e.g. /dev/serial0)
+PORT = '/dev/ttyACM0'   # change if needed (e.g. /dev/serial0)
 BAUDRATE = 9600         # adjust to your scanner
 TIMEOUT = 1
 

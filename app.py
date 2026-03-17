@@ -3,6 +3,9 @@ import json
 import os
 import sys
 from datetime import datetime, timedelta
+import threading
+import serial
+import time
 
 app = Flask(__name__)
 
@@ -12,17 +15,48 @@ CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 DATA_FILE = os.path.join(BASE_DIR, "data.json")
 
 last_mtime = 0
+scanner_data = ""   # 🔌 shared scanner buffer
 
 SUCCESS_COLOR = "#16a34a"
 ERROR_COLOR = "#ef4444"
+
+# ---------- SERIAL READER THREAD ----------
+
+def serial_reader():
+    global scanner_data
+
+    try:
+        ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+        print("📡 Scanner connected on /dev/ttyACM0")
+
+        buffer = ""
+
+        while True:
+            if ser.in_waiting:
+                data = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+                buffer += data
+
+                if '\n' in buffer or '\r' in buffer:
+                    lines = buffer.splitlines()
+                    for line in lines:
+                        if line.strip():
+                            scanner_data = line.strip()
+                            print("🔍 Scanned:", scanner_data)
+                    buffer = ""
+
+            time.sleep(0.05)
+
+    except Exception as e:
+        print("❌ Serial error:", e)
+
 
 # ---------- Create files if missing ----------
 
 if not os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, "w") as f:
         json.dump({
-            "alarm_delay": 0.0433,   # hours (~2.6 min)
-            "expire_delay": 0.0833,  # hours (~5 min)
+            "alarm_delay": 0.0433,
+            "expire_delay": 0.0833,
             "dark_mode": True
         }, f, indent=4)
 
@@ -31,7 +65,7 @@ if not os.path.exists(DATA_FILE):
         json.dump([], f, indent=4)
 
 
-# ---------- Safe JSON loader ----------
+# ---------- JSON helpers ----------
 
 def load_json(file, default):
     try:
@@ -43,17 +77,15 @@ def load_json(file, default):
 
 def load_config():
     return load_json(CONFIG_FILE, {
-    "alarm_delay": 0.5,
-    "expire_delay": 1.5,
-    "dark_mode": True
-})
+        "alarm_delay": 0.5,
+        "expire_delay": 1.5,
+        "dark_mode": True
+    })
 
 
 def load_data():
     return load_json(DATA_FILE, [])
 
-
-# ---------- Save functions ----------
 
 def save_config(data):
     with open(CONFIG_FILE, "w") as f:
@@ -85,7 +117,7 @@ def check_config():
     reload_config_if_changed()
 
 
-# ---------- Routes ----------
+# ---------- ROUTES ----------
 
 @app.route("/")
 def index():
@@ -105,97 +137,105 @@ def api_settings():
 
 @app.route("/save_settings", methods=["POST"])
 def save_settings():
-    param = {}
     try:
         data = request.json
-
         save_config(data)
-
-        # update immediately (no delay)
         app.config.update(data)
 
-        param["status"] = f"✅ Settings saved"
-        param["status_color"] = SUCCESS_COLOR
+        return jsonify({
+            "status": "✅ Settings saved",
+            "status_color": SUCCESS_COLOR
+        })
+
     except Exception as e:
-        param["status"] = f"Error at line: {sys.exc_info()[-1].tb_lineno} {e}"
-        param["status_color"] = ERROR_COLOR
+        return jsonify({
+            "status": f"Error at line: {sys.exc_info()[-1].tb_lineno} {e}",
+            "status_color": ERROR_COLOR
+        })
 
-    return jsonify(param)
 
+# ---------- 🔥 SCANNER API ----------
 
-@app.route("/scan_lot", methods=["POST"])
-def scan_lot():
-    param = {}
+@app.route("/api/scan")
+def api_scan():
+    global scanner_data
+
     try:
-        data = request.get_json()
-        lot = data.get("lot")
+        lot = scanner_data
+        scanner_data = ""  # clear after read
+
+        if not lot:
+            return jsonify({"lot": None})
 
         lots = load_data()
         config = load_config()
 
-        # ✅ CHECK DUPLICATE
+        # duplicate check
         for l in lots:
             if l["lot"] == lot:
-                param["status"] = f"⚠️ Lot {lot} already exists"
-                param["status_color"] = ERROR_COLOR
-                return jsonify(param)
+                return jsonify({
+                    "lot": lot,
+                    "status": f"⚠️ Lot {lot} already exists",
+                    "status_color": ERROR_COLOR
+                })
 
         now = datetime.now()
 
-        # convert hours → minutes
         alarm_minutes = config.get("alarm_delay", 0) * 60
         expire_minutes = config.get("expire_delay", 0) * 60
 
-        new_lot = [{
+        new_lot = {
             "lot": lot,
             "alarm": (now + timedelta(minutes=alarm_minutes)).strftime("%Y-%m-%d %H:%M:%S"),
             "expire": (now + timedelta(minutes=expire_minutes)).strftime("%Y-%m-%d %H:%M:%S"),
             "isalarm": None
-        }]
+        }
 
-        lots = new_lot + lots
-
+        lots.insert(0, new_lot)
         save_data(lots)
 
-        param["status"] = f"✅ Lot {lot} saved"
-        param["status_color"] = SUCCESS_COLOR
+        return jsonify({
+            "lot": lot,
+            "status": f"✅ Lot {lot} saved",
+            "status_color": SUCCESS_COLOR
+        })
 
     except Exception as e:
-        param["status"] = f"Error at line: {sys.exc_info()[-1].tb_lineno} {e}"
-        param["status_color"] = ERROR_COLOR
-
-    return jsonify(param)
+        return jsonify({
+            "status": f"Error at line: {sys.exc_info()[-1].tb_lineno} {e}",
+            "status_color": ERROR_COLOR
+        })
 
 
 @app.route("/delete_lot", methods=["POST"])
 def delete_lot():
-    param = {}
     try:
         data = request.get_json()
         lot_to_delete = data.get("lot")
 
         lots = load_data()
-
-        # filter out the lot
         new_lots = [lot for lot in lots if lot["lot"] != lot_to_delete]
-
         save_data(new_lots)
 
-        param["status"] = f"🗑️ Lot {lot_to_delete} deleted"
-        param["status_color"] = SUCCESS_COLOR
+        return jsonify({
+            "status": f"🗑️ Lot {lot_to_delete} deleted",
+            "status_color": SUCCESS_COLOR
+        })
 
     except Exception as e:
-        param["status"] = f"Error at line: {sys.exc_info()[-1].tb_lineno} {e}"
-        param["status_color"] = ERROR_COLOR
-
-    return jsonify(param)
+        return jsonify({
+            "status": f"Error at line: {sys.exc_info()[-1].tb_lineno} {e}",
+            "status_color": ERROR_COLOR
+        })
 
 
 @app.route("/api/lots")
 def api_lots():
     lots = load_data()
-    lots = process_lots(lots)
-    return jsonify(lots)
+    return jsonify(process_lots(lots))
+
+
+# ---------- PROCESS ----------
 
 def process_lots(lots):
     now = datetime.now()
@@ -204,7 +244,6 @@ def process_lots(lots):
         alarm_time = datetime.strptime(lot["alarm"], "%Y-%m-%d %H:%M:%S")
         expire_time = datetime.strptime(lot["expire"], "%Y-%m-%d %H:%M:%S")
 
-        # ===== REMAIN TIME =====
         diff_sec = int((expire_time - now).total_seconds())
         if diff_sec < 0:
             diff_sec = 0
@@ -214,7 +253,6 @@ def process_lots(lots):
 
         lot["remain_text"] = f"{minutes}m {seconds:02d}s"
 
-        # ===== STATUS =====
         if now >= expire_time:
             lot["status"] = "Expired"
         elif now >= alarm_time:
@@ -225,12 +263,13 @@ def process_lots(lots):
     return lots
 
 
-# ---------- Run ----------
+# ---------- RUN ----------
 
 if __name__ == "__main__":
-    # load config at startup
     app.config.update(load_config())
-
     reload_config_if_changed()
 
-    app.run(debug=True)
+    # 🔌 START SERIAL THREAD
+    threading.Thread(target=serial_reader, daemon=True).start()
+
+    app.run(host="0.0.0.0", port=5000, debug=True)
