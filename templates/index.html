@@ -716,8 +716,10 @@
                         // remain color same as status
                         let remainClass = statusClass
 
-                        // optional 🔔 icon
-                        let alarmIcon = lot.isalarm ? " 🔔✔" : " 🔔"
+                        // icon
+                        let alarmIcon = lot.isalarm
+                        ? '<i class="fa-solid fa-bell"></i> <i class="fa-solid fa-check"></i>'
+                        : '<i class="fa-solid fa-bell"></i>';
 
                         table.innerHTML += `
 <tr class="lot-row" data-status="${lot.status}">
