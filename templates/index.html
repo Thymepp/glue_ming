@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Glue Monitoring System</title>
+
+    <style>
+        /* ---------- THEME VARIABLES ---------- */
+
+        :root {
+            --bg: #0b0f14;
+            --bg2: #111827;
+            --card: #11161d;
+            --text: #e5e7eb;
+            --muted: #9ca3af;
+            --table: #151b23;
+        }
+
+        body.light {
+            --bg: #f3f4f6;
+            --bg2: #ffffff;
+            --card: #ffffff;
+            --text: #111827;
+            --muted: #6b7280;
+            --table: #f9fafb;
+        }
+
+        /* ---------- BASE ---------- */
+
+        body {
+            background: linear-gradient(135deg, var(--bg), var(--bg2));
+            color: var(--text);
+            font-family: Segoe UI, Roboto, Arial;
+            margin: 0;
+            padding: 40px;
+            transition: 0.3s;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        /* ---------- HEADER ---------- */
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: var(--muted);
+        }
+
+        /* ---------- BUTTONS ---------- */
+
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            border: none;
+            cursor: pointer;
+            border-radius: 8px;
+            padding: 10px 16px;
+            color: white;
+        }
+
+        .btn-settings {
+            background: #1f2933;
+        }
+
+        .btn-settings:hover {
+            background: #374151;
+        }
+
+        .btn-save {
+            background: #16a34a;
+        }
+
+        .btn-exit {
+            background: #374151;
+        }
+
+        /* ---------- CARDS ---------- */
+
+        .cards {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 35px;
+        }
+
+        .card {
+            flex: 1;
+            background: var(--card);
+            border: 1px solid #1f2933;
+            padding: 22px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            transition: 0.25s;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+        }
+
+        .card div {
+            color: var(--muted);
+            font-size: 14px;
+            margin-bottom: 6px;
+        }
+
+        .card h2 {
+            margin: 0;
+            font-size: 30px;
+        }
+
+        .card.active-filter {
+            border: 2px solid #ff6b3d;
+            box-shadow: 0 0 10px rgba(255, 107, 61, 0.6);
+            transform: translateY(-4px);
+        }
+
+        /* ---------- TABLE ---------- */
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .table th {
+            text-align: left;
+            padding: 16px;
+            font-size: 12px;
+            color: var(--muted);
+            border-bottom: 1px solid #1f2933;
+        }
+
+        .table td {
+            padding: 16px;
+            border-bottom: 1px solid #1c232b;
+        }
+
+        .table tr:hover {
+            background: var(--table);
+        }
+
+        /* ---------- STATUS BADGES ---------- */
+
+        .status {
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .active {
+            background: #053d2e;
+            color: #00ffa6;
+        }
+
+        .expired {
+            background: #3a0f12;
+            color: #ff5c5c;
+        }
+
+        .alarm {
+            background: #3a2a00;
+            color: #ffc400;
+        }
+
+        /* ---------- MODAL ---------- */
+
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background: var(--card);
+            margin: 8% auto;
+            padding: 30px;
+            border-radius: 14px;
+            width: 420px;
+            border: 1px solid #1f2933;
+        }
+
+        .modal-content label {
+            display: block;
+            margin-top: 12px;
+            color: var(--muted);
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 6px;
+            background: #1c232b;
+            border: none;
+            border-radius: 6px;
+            color: white;
+        }
+
+        .close {
+            float: right;
+            font-size: 24px;
+            cursor: pointer;
+            color: #aaa;
+        }
+
+        /* ---------- MODAL BUTTONS ---------- */
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* ---------- THEME TOGGLE ---------- */
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .theme-label {
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        /* ---------- SWITCH ---------- */
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 52px;
+            height: 26px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            inset: 0;
+            cursor: pointer;
+            background: #374151;
+            transition: 0.3s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            content: "";
+            position: absolute;
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background: #16a34a;
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(26px);
+        }
+
+        .hint {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        /* Hide arrows in Chrome, Safari, Edge */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .icon {
+            font-size: 32px;
+            margin-right: 8px;
+        }
+
+        /* Individual styles */
+        .total-icon {
+            color: #4da3ff;
+            /* blue */
+        }
+
+        .active-icon {
+            color: #28c76f;
+            /* green */
+        }
+
+        .alarm-icon {
+            color: #ffc107;
+            /* yellow */
+        }
+
+        .fail-icon {
+            color: #ff4d4f;
+            /* red */
+        }
+        </style>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="container">
+
+        <div class="header">
+
+            <div>
+                <h1>Glue Monitoring System</h1>
+                <div class="subtitle">Real-time adhesive lot tracking</div>
+            </div>
+
+            <div class="header-buttons">
+                <button class="btn-settings" onclick="toggleSettings()">⚙ Settings</button>
+            </div>
+            <!-- <input id="lot" autofocus autocomplete="off" style="opacity:400; position:absolute;"> -->
+            <!-- <input id="lot" autofocus autocomplete="off" style="opacity:100; position:absolute; pointer-events:none;"> -->
+            <input id="lot" autofocus autocomplete="off" style="opacity:0; position:absolute; left:-9999px;">
+
+        </div>
+
+        <div class="cards">
+            <div class="card filter-card active-filter" onclick="filterLots('all', this)">
+                <div>
+                    <i class="fa-solid fa-layer-group total-icon icon"></i>
+                    Total Lots
+                </div>
+                <h2 id="countTotal">0</h2>
+            </div>
+
+            <div class="card filter-card" onclick="filterLots('Active', this)">
+                <div>
+                    <i class="fa-solid fa-circle-check active-icon icon"></i>
+                    Active
+                </div>
+                <h2 id="countActive">0</h2>
+            </div>
+
+            <div class="card filter-card" onclick="filterLots('Alarm', this)">
+                <div>
+                    <i class="fa-solid fa-triangle-exclamation alarm-icon icon"></i>
+                    In Alarm
+                </div>
+                <h2 id="countAlarm">0</h2>
+            </div>
+
+            <div class="card filter-card" onclick="filterLots('Expired', this)">
+                <div>
+                    <i class="fa-solid fa-circle-xmark fail-icon icon"></i>
+                    Expired
+                </div>
+                <h2 id="countExpired">0</h2>
+            </div>
+        </div>
+        <table class="table">
+
+            <tr>
+                <th>LOT NUMBER</th>
+                <th>ALARM TIME</th>
+                <th>EXPIRE TIME</th>
+                <th>REMAIN</th>
+                <th>STATUS</th>
+                <th></th>
+            </tr>
+
+            <tbody id="lotsTable">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    <!-- SETTINGS MODAL -->
+
+    <div id="settingsModal" class="modal">
+
+        <div class="modal-content">
+
+            <span class="close" onclick="toggleSettings()">×</span>
+
+            <h2>System Settings</h2>
+
+            <label for="alarmDelay">Alarm Delay (hours)</label>
+            <input id="alarmDelay" type="number" min="0" max="24" step="0.1" inputmode="decimal"
+                value="{{ config.alarm_delay }}">
+            <div class="hint" id="alarmDelayMin">≈ {{ config.alarm_delay*60 }} min</div>
+
+            <label for="expireDelay">Expire Delay (hours)</label>
+            <input id="expireDelay" type="number" min="0" max="24" step="0.1" inputmode="decimal"
+                value="{{ config.expire_delay }}">
+            <div class="hint" id="expireDelayMin">≈ {{ config.expire_delay*60 }} min</div>
+
+            <div class="theme-toggle">
+
+                <span class="theme-label">☀ Light</span>
+
+                <label class="switch">
+                    <input id="darkMode" type="checkbox" {{ 'checked' if config.dark_mode else '' }}>
+                    <span class="slider"></span>
+                </label>
+
+                <span class="theme-label">🌙 Dark</span>
+
+            </div>
+
+            <div class="modal-buttons">
+
+                <button class="btn-save" onclick="saveSettings()">Save</button> <button class="btn-exit"
+                    onclick="toggleSettings()">Exit</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        /* SETTINGS MODAL */
+
+        function toggleSettings() {
+
+            let modal = document.getElementById("settingsModal")
+
+            if (modal.style.display === "block") {
+
+                modal.style.display = "none"
+                lotInput.focus()
+
+            } else {
+
+                fetch("/api/settings")
+                    .then(r => r.json())
+                    .then(config => {
+
+                        document.getElementById("alarmDelay").value = config.alarm_delay
+                        document.getElementById("expireDelay").value = config.expire_delay
+                        document.getElementById("darkMode").checked = config.dark_mode
+
+                        updateMinutesDelay()
+
+                        modal.style.display = "block"
+
+                    })
+
+            }
+
+        }
+
+        /* DARK MODE */
+
+        function applyTheme() {
+
+            let dark = document.getElementById("darkMode").checked
+
+            if (dark) {
+                document.body.classList.remove("light")
+            } else {
+                document.body.classList.add("light")
+            }
+
+        }
+
+        document.getElementById("darkMode").addEventListener("change", applyTheme)
+
+        /* SAVE SETTINGS */
+
+        function saveSettings() {
+
+            let dark = document.getElementById("darkMode").checked
+
+            let alarm = parseFloat(document.getElementById("alarmDelay").value)
+            let expire = parseFloat(document.getElementById("expireDelay").value)
+            if (alarm < 0 || expire < 0) {
+                alert("Alarm and expire delay must be 0 or greater");
+                return;
+            }
+
+            if (alarm >= expire) {
+                alert("Alarm delay must be less than expire delay");
+                return;
+            }
+            let data = {
+                alarm_delay: alarm,
+                expire_delay: expire,
+                dark_mode: dark
+            }
+
+            fetch("/save_settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            })
+                .then(r => r.json())
+                .then(d => {
+
+                    let msg = document.createElement("div")
+                    msg.innerText = d.status
+                    msg.style.background = d.status_color
+                    msg.style.position = "fixed"
+                    msg.style.bottom = "20px"
+                    msg.style.right = "20px"
+                    msg.style.color = "white"
+                    msg.style.padding = "10px 16px"
+                    msg.style.borderRadius = "8px"
+
+                    document.body.appendChild(msg)
+
+                    setTimeout(() => msg.remove(), 2000)
+
+                    applyTheme()
+                })
+        }
+        function formatTime(hours) {
+            let totalSec = Math.round(hours * 3600)
+
+            let minutes = Math.floor(totalSec / 60)
+            let seconds = totalSec % 60
+
+            return `${minutes}m ${seconds.toString().padStart(2, '0')}s`
+        }
+
+        function updateMinutesDelay() {
+
+            let alarm = parseFloat(document.getElementById("alarmDelay").value) || 0
+            let expire = parseFloat(document.getElementById("expireDelay").value) || 0
+
+            document.getElementById("alarmDelayMin").innerText =
+                "≈ " + formatTime(alarm)
+
+            document.getElementById("expireDelayMin").innerText =
+                "≈ " + formatTime(expire)
+        }
+
+        document.getElementById("alarmDelay").addEventListener("input", updateMinutesDelay)
+        document.getElementById("expireDelay").addEventListener("input", updateMinutesDelay)
+
+        /* APPLY MODE ON PAGE LOAD */
+
+        window.onload = function () {
+
+            let dark = {{ config.dark_mode | tojson}};
+
+        if (!dark) {
+            document.body.classList.add("light");
+        }
+    }
+        let currentFilter = "all"
+
+        function filterLots(status, element = null) {
+
+            currentFilter = status
+
+            // update card highlight ONLY if clicked
+            if (element) {
+
+                document.querySelectorAll(".filter-card").forEach(card => {
+                    card.classList.remove("active-filter")
+                })
+
+                element.classList.add("active-filter")
+
+            }
+
+            let rows = document.querySelectorAll(".lot-row")
+
+            rows.forEach(row => {
+
+                let rowStatus = row.dataset.status
+
+                if (status === "all" || rowStatus === status) {
+                    row.style.display = ""
+                } else {
+                    row.style.display = "none"
+                }
+
+            })
+        }
+        const lotInput = document.getElementById("lot")
+
+        lotInput.addEventListener("change", function () {
+
+            let lot = lotInput.value.trim()
+
+            if (lot === "") return
+
+            fetch("/scan_lot", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ lot: lot })
+            })
+                .then(r => r.json())
+                .then(data => {
+
+                    let msg = document.createElement("div")
+                    msg.innerText = data.status
+                    msg.style.background = data.status_color
+                    msg.style.position = "fixed"
+                    msg.style.bottom = "20px"
+                    msg.style.right = "20px"
+                    msg.style.color = "white"
+                    msg.style.padding = "10px 16px"
+                    msg.style.borderRadius = "8px"
+
+                    document.body.appendChild(msg)
+
+                    setTimeout(() => msg.remove(), 2000)
+
+                    lotInput.value = ""      // clear input
+                    lotInput.focus()         // ready for next scan
+                })
+
+        })
+
+        function deleteLot(lotNumber) {
+
+            let input = prompt(`Type lot number "${lotNumber}" to confirm delete:`);
+
+            if (input !== lotNumber) {
+                alert("Lot number does not match. Cancelled.");
+                return;
+            }
+
+            fetch("/delete_lot", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ lot: lotNumber })
+            })
+            .then(r => r.json())
+            .then(data => {
+                    let msg = document.createElement("div")
+                    msg.innerText = data.status
+                    msg.style.background = data.status_color
+                    msg.style.position = "fixed"
+                    msg.style.bottom = "20px"
+                    msg.style.right = "20px"
+                    msg.style.color = "white"
+                    msg.style.padding = "10px 16px"
+                    msg.style.borderRadius = "8px"
+
+                    document.body.appendChild(msg)
+
+                    setTimeout(() => msg.remove(), 2000)
+                loadLots();
+            });
+        }
+
+        /* keep focus for scanner */
+
+        lotInput.addEventListener("blur", () => {
+            setTimeout(() => {
+                let modal = document.getElementById("settingsModal")
+                if (modal.style.display !== "block") {
+                    lotInput.focus()
+                }
+            }, 100)
+        })
+
+        function loadLots() {
+
+            fetch("/api/lots")
+                .then(r => r.json())
+                .then(data => {
+
+                    let table = document.getElementById("lotsTable")
+                    table.innerHTML = ""
+
+                    let total = data.length
+                    let active = 0
+                    let alarm = 0
+                    let expired = 0
+
+                    data.forEach(lot => {
+
+                        // count status (from backend)
+                        if (lot.status === "Active") active++
+                        else if (lot.status === "Alarm") alarm++
+                        else if (lot.status === "Expired") expired++
+
+                        // status color
+                        let statusClass = "active"
+                        if (lot.status === "Expired") statusClass = "expired"
+                        else if (lot.status === "Alarm") statusClass = "alarm"
+
+                        // remain color same as status
+                        let remainClass = statusClass
+
+                        // optional 🔔 icon
+                        let alarmIcon = lot.isalarm ? " 🔔✔" : " 🔔"
+
+                        table.innerHTML += `
+<tr class="lot-row" data-status="${lot.status}">
+<td>${lot.lot}</td>
+<td>${lot.alarm}</td>
+<td>${lot.expire}</td>
+<td class="${remainClass}">${lot.remain_text} ${alarmIcon}</td>
+<td>
+<span class="status ${statusClass}">
+${lot.status}
+</span>
+</td>
+<td>
+    <i class="fa-regular fa-circle-xmark" onclick="deleteLot('${lot.lot}')"></i>
+</td>
+</tr>
+`
+                    })
+                    // update cards
+                    document.getElementById("countTotal").innerText = total
+                    document.getElementById("countActive").innerText = active
+                    document.getElementById("countAlarm").innerText = alarm
+                    document.getElementById("countExpired").innerText = expired
+
+                    filterLots(currentFilter)
+                })
+        }
+
+        loadLots()
+        setInterval(loadLots, 1000)
+
+    </script>
+
+</body>
+
+</html>
