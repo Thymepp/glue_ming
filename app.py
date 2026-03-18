@@ -52,43 +52,45 @@ def monitor_buttons():
 
 def monitor_alarm():
     global system_running
-    if not system_running:
-        return
     while True:
         try:
             lots = load_data()
             lots = process_lots(lots)
 
+            # Check if any lot is in Alarm/Expired and not yet acknowledged
             has_alarm = any(
-                lot["status"] in ["Alarm", "Expired"]
+                lot["status"] in ["Alarm", "Expired"] and lot.get("isalarm") is None
                 for lot in lots
             )
 
+            # Sensor alarm check
             sensor = read_sensor()
             sensor_alarm = sensor in ["Empty", "Low"]
 
-
-            if has_alarm and sensor_alarm:
+            # Alarm triggers if system running and either lot or sensor alarm
+            if system_running and (has_alarm or sensor_alarm):
                 alarm_on()
                 led_reset_on()
-                lots = load_data()
-                if is_reset_btn_press():
-                    time.sleep(0.5)
-                    if is_reset_btn_press():
-                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        for lot in lots:
-                            if lot["isalarm"] is None and lots["alarm"] < now_str:
-                                lot["isalarm"] = now_str
-                        save_data(lots)
             else:
                 alarm_off()
                 led_reset_off()
+
+            # Manual acknowledge via reset button
+            if is_reset_btn_press():
+                time.sleep(0.5)
+                if is_reset_btn_press():
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    for lot in lots:
+                        if lot.get("isalarm") is None and lot["status"] in ["Alarm", "Expired"]:
+                            lot["isalarm"] = now_str
+                    save_data(lots)
+                    alarm_off()
+                    led_reset_off()
 
             time.sleep(0.5)
 
         except Exception as e:
             print("Alarm error:", e)
-
 def init_gpio():
     global h
     if h is None:
