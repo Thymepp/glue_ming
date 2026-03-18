@@ -27,6 +27,26 @@ BUZZER = 5 # out
 LED_RESET = 4 # out
 
 h = None
+system_running = False
+
+def monitor_buttons():
+    global system_running
+
+    while True:
+        try:
+            if is_start_btn_press():
+                system_running = True
+                led_reset_off()
+                alarm_off()
+            else:
+                system_running = False
+                led_reset_on()
+                alarm_on()
+
+            time.sleep(0.1)
+
+        except Exception as e:
+            print("Button error:", e)
 
 def init_gpio():
     global h
@@ -240,7 +260,14 @@ def save_settings():
 
 @app.route("/api/scan")
 def api_scan():
-    global scanner_data
+    global scanner_data, system_running
+
+    if not system_running:
+        return jsonify({
+            "lot": None,
+            "status": "🔴 System disconnected",
+            "status_color": ERROR_COLOR
+        })
 
     try:
         with scanner_lock:
@@ -349,5 +376,6 @@ if __name__ == "__main__":
     reload_config_if_changed()
 
     threading.Thread(target=serial_reader, daemon=True).start()
+    threading.Thread(target=monitor_buttons, daemon=True).start()
     
     app.run(host="0.0.0.0", port=5001, use_reloader=False)
