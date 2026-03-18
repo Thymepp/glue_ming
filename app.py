@@ -20,11 +20,13 @@ last_mtime = 0
 
 # GPIO
 CHIP = 0
+# in
 SENSORS = {"Empty": 20, "Low": 17, "Full": 16}
-BUTTON_START = 21 # in
-BUTTON_RESET = 22 # in
-BUZZER = 5 # out
-LED_RESET = 4 # out
+BUTTON_START = 21
+BUTTON_RESET = 22
+# out
+BUZZER = 5
+LED_RESET = 4
 
 h = None
 system_running = False
@@ -64,18 +66,23 @@ def monitor_alarm():
 
             sensor = read_sensor()
             sensor_alarm = sensor in ["Empty", "Low"]
-            
-            if is_reset_btn_press():
-                time.sleep(0.5)
-                if is_reset_btn_press():
-                    alarm_off()
-                    continue
 
-            # 🔔 final decision
-            if has_alarm or sensor_alarm:
+
+            if has_alarm and sensor_alarm:
                 alarm_on()
+                led_reset_on()
+                lots = load_data()
+                if is_reset_btn_press():
+                    time.sleep(0.5)
+                    if is_reset_btn_press():
+                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        for lot in lots:
+                            if lot["isalarm"] is None and lots["alarm"] < now_str:
+                                lot["isalarm"] = now_str
+                        save_data(lots)
             else:
                 alarm_off()
+                led_reset_off()
 
             time.sleep(0.5)
 
@@ -418,5 +425,5 @@ if __name__ == "__main__":
     threading.Thread(target=serial_reader, daemon=True).start()
     threading.Thread(target=monitor_buttons, daemon=True).start()
     threading.Thread(target=monitor_alarm, daemon=True).start()
-    
+
     app.run(host="0.0.0.0", port=5001, use_reloader=False)
