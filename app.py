@@ -57,17 +57,14 @@ def monitor_alarm():
             lots = load_data()
             lots = process_lots(lots)
 
-            # Check if any lot is in Alarm/Expired and not yet acknowledged
             has_alarm = any(
                 lot["status"] in ["Alarm", "Expired"] and lot.get("isalarm") is None
                 for lot in lots
             )
 
-            # Sensor alarm check
             sensor = read_sensor()
             sensor_alarm = sensor in ["Empty", "Low"]
 
-            # Alarm triggers if system running and either lot or sensor alarm
             if system_running and (has_alarm or sensor_alarm):
                 alarm_on()
                 led_reset_on()
@@ -75,7 +72,6 @@ def monitor_alarm():
                 alarm_off()
                 led_reset_off()
 
-            # Manual acknowledge via reset button
             if is_reset_btn_press():
                 time.sleep(0.5)
                 if is_reset_btn_press():
@@ -134,7 +130,7 @@ def read_sensor():
     else:
         return "Full"   # default
 
-# 🔒 thread-safe scanner data
+# thread-safe scanner data
 scanner_data = ""
 scanner_lock = threading.Lock()
 
@@ -172,7 +168,6 @@ def serial_reader():
 
                             now = time.time()
 
-                            # 🚫 prevent duplicate scan within 1 sec
                             if lot == last_scan and (now - last_scan_time) < 1:
                                 continue
 
@@ -304,7 +299,7 @@ def save_settings():
         })
 
 
-# ---------- 🔥 SCAN API ----------
+# ---------- SCAN API ----------
 
 @app.route("/api/scan")
 def api_scan():
