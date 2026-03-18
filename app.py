@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import threading
 import serial
 import time
+import lgpio
+
 
 app = Flask(__name__)
 
@@ -15,6 +17,39 @@ CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 DATA_FILE = os.path.join(BASE_DIR, "data.json")
 
 last_mtime = 0
+
+# GPIO
+CHIP = 0
+SENSORS = {"Empty": 20, "Low": 17, "Full": 16}
+BUTTON_START = 21 # in
+BUTTON_RESET = 22 # in
+BUZZER = 5 # out
+LED_RESET = 4 # out
+
+# เปิด chip
+h = lgpio.gpiochip_open(CHIP)
+
+# ตั้ง input (sensor + button)
+for pin in list(SENSORS.values()) + [BUTTON_START, BUTTON_RESET]:
+    lgpio.gpio_claim_input(h, pin, lgpio.SET_ACTIVE_LOW)
+
+def led_reset_on():
+    lgpio.gpio_write(h, LED_RESET, 0)
+
+def led_reset_off():
+    lgpio.gpio_write(h, LED_RESET, 1)
+
+def alarm_on():
+    lgpio.gpio_write(h, BUZZER, 0)
+
+def alarm_off():
+    lgpio.gpio_write(h, BUZZER, 1)
+
+def start_btn_press():
+    return bool(lgpio.gpio_read(h, BUTTON_START))
+
+def reset_btn_press():
+    return bool(lgpio.gpio_read(h, BUTTON_RESET))
 
 # 🔒 thread-safe scanner data
 scanner_data = ""
@@ -102,11 +137,7 @@ def load_json(file, default):
 
 
 def load_config():
-    return load_json(CONFIG_FILE, {
-        "alarm_delay": 0.5,
-        "expire_delay": 1.5,
-        "dark_mode": True
-    })
+    return load_json(CONFIG_FILE, {})
 
 
 def load_data():
@@ -289,4 +320,4 @@ if __name__ == "__main__":
 
     threading.Thread(target=serial_reader, daemon=True).start()
 
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)
