@@ -350,7 +350,7 @@
     background:#3a0f12;
     color:#ff5c5c;
 ">
-                    🔴 DISCONNECTED
+                    DISCONNECTED
                 </div>
                 <button class="btn-settings" onclick="toggleSettings()">⚙ Settings</button>
             </div>
@@ -509,11 +509,11 @@
                     let el = document.getElementById("systemStatus")
 
                     if (data.running) {
-                        el.innerText = "🟢 ACTIVE"
+                        el.innerText = "ACTIVE"
                         el.style.background = "#053d2e"
                         el.style.color = "#00ffa6"
                     } else {
-                        el.innerText = "🔴 DISCONNECTED"
+                        el.innerText = "DISCONNECTED"
                         el.style.background = "#3a0f12"
                         el.style.color = "#ff5c5c"
                     }
@@ -750,7 +750,7 @@ ${lot.status}
         }
 
         loadLots()
-        setInterval(loadLots, 2000)
+        setInterval(loadLots, 1000)
     </script>
 
 </body>
