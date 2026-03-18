@@ -48,6 +48,40 @@ def monitor_buttons():
         except Exception as e:
             print("Button error:", e)
 
+def monitor_alarm():
+    global system_running
+    if not system_running:
+        return
+    while True:
+        try:
+            lots = load_data()
+            lots = process_lots(lots)
+
+            has_alarm = any(
+                lot["status"] in ["Alarm", "Expired"]
+                for lot in lots
+            )
+
+            sensor = read_sensor()
+            sensor_alarm = sensor in ["Empty", "Low"]
+            
+            if is_reset_btn_press():
+                time.sleep(0.5)
+                if is_reset_btn_press():
+                    alarm_off()
+                    continue
+
+            # 🔔 final decision
+            if has_alarm or sensor_alarm:
+                alarm_on()
+            else:
+                alarm_off()
+
+            time.sleep(0.5)
+
+        except Exception as e:
+            print("Alarm error:", e)
+
 def init_gpio():
     global h
     if h is None:
@@ -227,6 +261,11 @@ def system_status():
         "running": system_running
     })
 
+@app.route("/api/sensor")
+def api_sensor():
+    return jsonify({
+        "status": read_sensor()
+    })
 
 @app.route("/api/settings")
 def api_settings():
@@ -263,6 +302,7 @@ def api_scan():
     global scanner_data, system_running
 
     if not system_running:
+        scanner_data = ""
         return jsonify({
             "lot": None,
             "status": "System disconnected",
@@ -377,5 +417,6 @@ if __name__ == "__main__":
 
     threading.Thread(target=serial_reader, daemon=True).start()
     threading.Thread(target=monitor_buttons, daemon=True).start()
+    threading.Thread(target=monitor_alarm, daemon=True).start()
     
     app.run(host="0.0.0.0", port=5001, use_reloader=False)

@@ -509,11 +509,11 @@
                     let el = document.getElementById("systemStatus")
 
                     if (data.running) {
-                        el.innerText = "🟢 ACTIVE"
+                        el.innerText = "ACTIVE"
                         el.style.background = "#053d2e"
                         el.style.color = "#00ffa6"
                     } else {
-                        el.innerText = "🔴 DISCONNECTED"
+                        el.innerText = "DISCONNECTED"
                         el.style.background = "#3a0f12"
                         el.style.color = "#ff5c5c"
                     }
@@ -601,8 +601,7 @@
 
         window.onload = function () {
 
-            let dark = {{ config.dark_mode | tojson | safe
-        }};
+            let dark = {{ config.dark_mode | tojson | safe }};
 
         if (!dark) {
             document.body.classList.add("light");
@@ -750,7 +749,7 @@ ${lot.status}
         }
 
         loadLots()
-        setInterval(loadLots, 2000)
+        setInterval(loadLots, 1000)
     </script>
 
 </body>
