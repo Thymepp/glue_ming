@@ -45,11 +45,25 @@ def alarm_on():
 def alarm_off():
     lgpio.gpio_write(h, BUZZER, 1)
 
-def start_btn_press():
+def is_start_btn_press():
     return bool(lgpio.gpio_read(h, BUTTON_START))
 
-def reset_btn_press():
+def is_reset_btn_press():
     return bool(lgpio.gpio_read(h, BUTTON_RESET))
+
+def read_sensor():
+    e = lgpio.gpio_read(h, SENSORS["Empty"])
+    l = lgpio.gpio_read(h, SENSORS["Low"])
+    f = lgpio.gpio_read(h, SENSORS["Full"])
+
+    if e == 1:
+        return "Empty"
+    elif l == 1:
+        return "Low"
+    elif f == 1:
+        return "Full"
+    else:
+        return "Full"   # default
 
 # 🔒 thread-safe scanner data
 scanner_data = ""
