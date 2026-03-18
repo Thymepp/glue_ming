@@ -26,12 +26,18 @@ BUTTON_RESET = 22 # in
 BUZZER = 5 # out
 LED_RESET = 4 # out
 
-# เปิด chip
-h = lgpio.gpiochip_open(CHIP)
+h = None
 
-# ตั้ง input (sensor + button)
-for pin in list(SENSORS.values()) + [BUTTON_START, BUTTON_RESET]:
-    lgpio.gpio_claim_input(h, pin, lgpio.SET_ACTIVE_LOW)
+def init_gpio():
+    global h
+    if h is None:
+        h = lgpio.gpiochip_open(CHIP)
+
+        for pin in list(SENSORS.values()) + [BUTTON_START, BUTTON_RESET]:
+            lgpio.gpio_claim_input(h, pin, lgpio.SET_ACTIVE_LOW)
+
+        for pin in [BUZZER, LED_RESET]:
+            lgpio.gpio_claim_output(h, pin, 1)
 
 def led_reset_on():
     lgpio.gpio_write(h, LED_RESET, 0)
@@ -329,9 +335,12 @@ def process_lots(lots):
 # ---------- RUN ----------
 
 if __name__ == "__main__":
+    init_gpio()
+
     app.config.update(load_config())
+
     reload_config_if_changed()
 
     threading.Thread(target=serial_reader, daemon=True).start()
-
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    
+    app.run(host="0.0.0.0", port=5001, use_reloader=False)

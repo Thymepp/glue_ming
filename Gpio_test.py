@@ -58,7 +58,7 @@ try:
         # time.sleep(1)
         # lgpio.gpio_write(h, BUZZER, 1)
         # time.sleep(1)
-        print("start",is_start_btn_press(), "reset",is_reset_btn_press(), read_sensor)
+        print("start",is_start_btn_press(), "reset", is_reset_btn_press(), "sensor", read_sensor())
         time.sleep(1)
 
 

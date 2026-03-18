@@ -520,24 +520,26 @@
             })
                 .then(r => r.json())
                 .then(d => {
-
-                    let msg = document.createElement("div")
-                    msg.innerText = d.status
-                    msg.style.background = d.status_color
-                    msg.style.position = "fixed"
-                    msg.style.bottom = "20px"
-                    msg.style.right = "20px"
-                    msg.style.color = "white"
-                    msg.style.padding = "10px 16px"
-                    msg.style.borderRadius = "8px"
-
-                    document.body.appendChild(msg)
-
-                    setTimeout(() => msg.remove(), 2000)
-
-                    applyTheme()
+                    showToast(d.status, d.status_color)
+                    toggleSettings()
                 })
         }
+
+        function showToast(text, color) {
+    let msg = document.createElement("div")
+    msg.innerText = text
+    msg.style.background = color
+    msg.style.position = "fixed"
+    msg.style.bottom = "20px"
+    msg.style.right = "20px"
+    msg.style.color = "white"
+    msg.style.padding = "10px 16px"
+    msg.style.borderRadius = "8px"
+
+    document.body.appendChild(msg)
+    setTimeout(() => msg.remove(), 2000)
+}
+
         function formatTime(hours) {
             let totalSec = Math.round(hours * 3600)
 
@@ -566,7 +568,7 @@
 
         window.onload = function () {
 
-            let dark = {{ config.dark_mode | tojson }};
+            let dark = {{ config.dark_mode | tojson | safe }};
 
         if (!dark) {
             document.body.classList.add("light");
@@ -605,35 +607,24 @@
         }
 
         // 🔌 SERIAL SCANNER POLLING
-        function pollScanner() {
-            fetch("/api/scan")
-                .then(r => r.json())
-                .then(data => {
+let scanning = false;
 
-                    if (!data.lot) return;
+function pollScanner() {
+    if (scanning) return;
+    scanning = true;
 
-                    console.log("🔍 Scanned:", data.lot);
+    fetch("/api/scan")
+        .then(r => r.json())
+        .then(data => {
 
-                    // ✅ SHOW RESULT DIRECTLY
-                    let msg = document.createElement("div")
-                    msg.innerText = data.status
-                    msg.style.background = data.status_color
-                    msg.style.position = "fixed"
-                    msg.style.bottom = "20px"
-                    msg.style.right = "20px"
-                    msg.style.color = "white"
-                    msg.style.padding = "10px 16px"
-                    msg.style.borderRadius = "8px"
+            if (data.lot) {
+                showToast(data.status, data.status_color);
+                loadLots();
+            }
 
-                    document.body.appendChild(msg)
-
-                    setTimeout(() => msg.remove(), 2000)
-
-                    loadLots(); // refresh table
-                })
-        }
-        // run every 300ms
-        setInterval(pollScanner, 300);
+        })
+        .finally(() => scanning = false);
+}setInterval(pollScanner, 800);
 
         function deleteLot(lotNumber) {
 
@@ -651,19 +642,7 @@
             })
                 .then(r => r.json())
                 .then(data => {
-                    let msg = document.createElement("div")
-                    msg.innerText = data.status
-                    msg.style.background = data.status_color
-                    msg.style.position = "fixed"
-                    msg.style.bottom = "20px"
-                    msg.style.right = "20px"
-                    msg.style.color = "white"
-                    msg.style.padding = "10px 16px"
-                    msg.style.borderRadius = "8px"
-
-                    document.body.appendChild(msg)
-
-                    setTimeout(() => msg.remove(), 2000)
+                    showToast(data.status, data.status_color)
                     loadLots();
                 });
         }
@@ -675,12 +654,14 @@
                 .then(data => {
 
                     let table = document.getElementById("lotsTable")
+                    
                     table.innerHTML = ""
-
                     let total = data.length
                     let active = 0
                     let alarm = 0
                     let expired = 0
+
+                    let html = ""
 
                     data.forEach(lot => {
 
@@ -702,7 +683,7 @@
                             ? '<i class="fa-solid fa-bell"></i> <i class="fa-solid fa-check"></i>'
                             : '<i class="fa-solid fa-bell"></i>';
 
-                        table.innerHTML += `
+                        html += `
 <tr class="lot-row" data-status="${lot.status}">
 <td>${lot.lot}</td>
 <td>${lot.alarm}</td>
@@ -719,6 +700,7 @@ ${lot.status}
 </tr>
 `
                     })
+                    table.innerHTML = html
                     // update cards
                     document.getElementById("countTotal").innerText = total
                     document.getElementById("countActive").innerText = active
@@ -730,8 +712,7 @@ ${lot.status}
         }
 
         loadLots()
-        setInterval(loadLots, 1000)
-
+        setInterval(loadLots, 2000)
     </script>
 
 </body>
