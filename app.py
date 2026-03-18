@@ -201,6 +201,13 @@ def index():
     return render_template("index.html", config=load_config())
 
 
+@app.route("/api/system_status")
+def system_status():
+    return jsonify({
+        "running": system_running
+    })
+
+
 @app.route("/api/settings")
 def api_settings():
     return jsonify({

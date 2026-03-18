@@ -342,6 +342,16 @@
             </div>
 
             <div class="header-buttons">
+                <div id="systemStatus" style="
+    padding:8px 14px;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:600;
+    background:#3a0f12;
+    color:#ff5c5c;
+">
+                    🔴 DISCONNECTED
+                </div>
                 <button class="btn-settings" onclick="toggleSettings()">⚙ Settings</button>
             </div>
 
@@ -490,6 +500,29 @@
 
         document.getElementById("darkMode").addEventListener("change", applyTheme)
 
+        function updateSystemStatus() {
+
+            fetch("/api/system_status")
+                .then(r => r.json())
+                .then(data => {
+
+                    let el = document.getElementById("systemStatus")
+
+                    if (data.running) {
+                        el.innerText = "🟢 ACTIVE"
+                        el.style.background = "#053d2e"
+                        el.style.color = "#00ffa6"
+                    } else {
+                        el.innerText = "🔴 DISCONNECTED"
+                        el.style.background = "#3a0f12"
+                        el.style.color = "#ff5c5c"
+                    }
+
+                })
+        }
+        setInterval(updateSystemStatus, 500)
+        updateSystemStatus()
+
         /* SAVE SETTINGS */
 
         function saveSettings() {
@@ -526,19 +559,19 @@
         }
 
         function showToast(text, color) {
-    let msg = document.createElement("div")
-    msg.innerText = text
-    msg.style.background = color
-    msg.style.position = "fixed"
-    msg.style.bottom = "20px"
-    msg.style.right = "20px"
-    msg.style.color = "white"
-    msg.style.padding = "10px 16px"
-    msg.style.borderRadius = "8px"
+            let msg = document.createElement("div")
+            msg.innerText = text
+            msg.style.background = color
+            msg.style.position = "fixed"
+            msg.style.bottom = "20px"
+            msg.style.right = "20px"
+            msg.style.color = "white"
+            msg.style.padding = "10px 16px"
+            msg.style.borderRadius = "8px"
 
-    document.body.appendChild(msg)
-    setTimeout(() => msg.remove(), 2000)
-}
+            document.body.appendChild(msg)
+            setTimeout(() => msg.remove(), 2000)
+        }
 
         function formatTime(hours) {
             let totalSec = Math.round(hours * 3600)
@@ -568,7 +601,8 @@
 
         window.onload = function () {
 
-            let dark = {{ config.dark_mode | tojson | safe }};
+            let dark = {{ config.dark_mode | tojson | safe
+        }};
 
         if (!dark) {
             document.body.classList.add("light");
@@ -607,24 +641,28 @@
         }
 
         // 🔌 SERIAL SCANNER POLLING
-let scanning = false;
+        let scanning = false;
 
-function pollScanner() {
-    if (scanning) return;
-    scanning = true;
+        function pollScanner() {
+            if (scanning) return;
+            scanning = true;
 
-    fetch("/api/scan")
-        .then(r => r.json())
-        .then(data => {
+            fetch("/api/scan")
+                .then(r => r.json())
+                .then(data => {
 
-            if (data.lot) {
-                showToast(data.status, data.status_color);
-                loadLots();
-            }
+                    if (data.status && !data.lot) {
+                        showToast(data.status, data.status_color);
+                    }
 
-        })
-        .finally(() => scanning = false);
-}setInterval(pollScanner, 800);
+                    if (data.lot) {
+                        showToast(data.status, data.status_color);
+                        loadLots();
+                    }
+
+                })
+                .finally(() => scanning = false);
+        } setInterval(pollScanner, 800);
 
         function deleteLot(lotNumber) {
 
@@ -654,7 +692,7 @@ function pollScanner() {
                 .then(data => {
 
                     let table = document.getElementById("lotsTable")
-                    
+
                     table.innerHTML = ""
                     let total = data.length
                     let active = 0

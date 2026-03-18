@@ -61,7 +61,6 @@ try:
         print("start",is_start_btn_press(), "reset", is_reset_btn_press(), "sensor", read_sensor())
         time.sleep(1)
 
-
 except KeyboardInterrupt:
     print("\nStopping... turning everything OFF")
 
