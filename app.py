@@ -66,7 +66,7 @@ def monitor_alarm():
             sensor_alarm = sensor in ["Empty", "Low"]
 
             if system_running and (has_alarm or sensor_alarm):
-                alarm_on()
+                # alarm_on()
                 led_reset_on()
             else:
                 alarm_off()
@@ -80,8 +80,6 @@ def monitor_alarm():
                         if lot.get("isalarm") is None and lot["status"] in ["Alarm", "Expired"]:
                             lot["isalarm"] = now_str
                     save_data(lots)
-                    alarm_off()
-                    led_reset_off()
 
             time.sleep(0.5)
 
@@ -267,6 +265,10 @@ def system_status():
 
 @app.route("/api/sensor")
 def api_sensor():
+    if not system_running:
+        return jsonify({
+            "status": "System disconnected",
+        })
     return jsonify({
         "status": read_sensor()
     })

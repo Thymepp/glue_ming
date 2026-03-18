@@ -352,6 +352,16 @@
 ">
                     DISCONNECTED
                 </div>
+                <div id="sensorStatus" style="
+    padding:8px 14px;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:600;
+    background:#1c232b;
+    color:#9ca3af;
+">
+    SENSOR: --
+</div>
                 <button class="btn-settings" onclick="toggleSettings()">⚙ Settings</button>
             </div>
 
@@ -523,6 +533,26 @@
         setInterval(updateSystemStatus, 500)
         updateSystemStatus()
 
+        let lastSensor = null;
+
+        function updateSensorStatus() {
+            fetch("/api/sensor")
+                .then(r => r.json())
+                .then(data => {
+
+                    let el = document.getElementById("sensorStatus")
+                    el.innerText = "SENSOR: " + data.status
+
+                    if (data.status !== lastSensor) {
+                        showToast("Sensor: " + data.status, "#2563eb")
+                        lastSensor = data.status
+                    }
+
+                })
+        }
+        setInterval(updateSensorStatus, 1000)
+        updateSensorStatus()
+
         /* SAVE SETTINGS */
 
         function saveSettings() {
@@ -561,16 +591,24 @@
         function showToast(text, color) {
             let msg = document.createElement("div")
             msg.innerText = text
-            msg.style.background = color
+
             msg.style.position = "fixed"
-            msg.style.bottom = "20px"
-            msg.style.right = "20px"
+            msg.style.top = "50%"
+            msg.style.left = "50%"
+            msg.style.transform = "translate(-50%, -50%)"
+
+            msg.style.background = color
             msg.style.color = "white"
-            msg.style.padding = "10px 16px"
-            msg.style.borderRadius = "8px"
+            msg.style.padding = "20px 32px"
+            msg.style.fontSize = "20px"
+            msg.style.fontWeight = "bold"
+            msg.style.borderRadius = "12px"
+            msg.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)"
+            msg.style.zIndex = "9999"
 
             document.body.appendChild(msg)
-            setTimeout(() => msg.remove(), 2000)
+
+            setTimeout(() => {msg.remove()}, 3000)
         }
 
         function formatTime(hours) {
