@@ -128,7 +128,7 @@ def read_sensor():
     elif f == 1:
         return "Full"
     else:
-        return "Full"   # default
+        return "Unknown"   # default
 
 # thread-safe scanner data
 scanner_data = ""
@@ -321,6 +321,14 @@ def api_scan():
         if not lot:
             return jsonify({"lot": None})
 
+
+        if read_sensor() != "Full":
+            return jsonify({
+                "lot": None,
+                "status": f"{lot} Lost Magnet",
+                "status_color": ERROR_COLOR
+            })
+
         lots = load_data()
         config = load_config()
 
@@ -371,7 +379,7 @@ def delete_lot():
         save_data(lots)
 
         return jsonify({
-            "status": f"🗑️ Lot {lot_to_delete} deleted",
+            "status": f"Lot {lot_to_delete} deleted",
             "status_color": SUCCESS_COLOR
         })
 
