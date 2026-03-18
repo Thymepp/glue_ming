@@ -36,12 +36,12 @@ def monitor_buttons():
         try:
             if is_start_btn_press():
                 system_running = True
-                led_reset_off()
-                alarm_off()
+                # led_reset_off()
+                # alarm_off()
             else:
                 system_running = False
-                led_reset_on()
-                alarm_on()
+                # led_reset_on()
+                # alarm_on()
 
             time.sleep(0.1)
 
@@ -265,7 +265,7 @@ def api_scan():
     if not system_running:
         return jsonify({
             "lot": None,
-            "status": "🔴 System disconnected",
+            "status": "System disconnected",
             "status_color": ERROR_COLOR
         })
 
