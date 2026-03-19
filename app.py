@@ -8,6 +8,8 @@ import serial
 import lgpio
 from rotating_logger import AppLogger, DEBUG
 
+from SVIClient import SVIClient
+
 SUCCESS_COLOR = "#16a34a"
 ERROR_COLOR = "#ef4444"
 
@@ -227,9 +229,27 @@ class SVIFlaskApp:
 
             if not lot:
                 return {"lot": None}
+            
+            # ----------- SVI Validation -----------
+            try:
+                svi_client = SVIClient(username="YOUR_USER", password="YOUR_PASS")
+                if not svi_client.authenticate():
+                    self.logger.error("SVI auth failed")
+                    return {"lot": lot, "status":"SVI auth failed","status_color":ERROR_COLOR}
+
+                # Example: validate lot via SVI (assuming save_assembly or a validate method)
+                # Here we just check if the lot can be saved
+                res = svi_client.save_assembly(wo="default", sn=lot, opname="scan", operator_id="1")
+                if res is None or res.status_code != 200:
+                    self.logger.warning(f"SVI validation failed for lot {lot}: {res.text if res else 'No response'}")
+                    return {"lot": lot, "status":"Lot failed SVI validation","status_color":ERROR_COLOR}
+            except Exception as e:
+                self.logger.error(f"SVI validation error: {e}")
+                return {"lot": lot, "status":f"SVI error: {e}","status_color":ERROR_COLOR}
+            # -------------------------------------
 
             if self.read_sensor() != "Full":
-                return {"lot": None, "status": f"{lot} Lost Magnet","status_color":ERROR_COLOR}
+                return {"lot": None, "status": f"{lot} Lost Magnet or sensor not FULL","status_color":ERROR_COLOR}
 
             lots = self.load_data()
             if any(l["lot"]==lot for l in lots):
