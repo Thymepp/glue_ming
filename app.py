@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify
 import serial
 import lgpio
+from rotating_logger import AppLogger, DEBUG
 
 SUCCESS_COLOR = "#16a34a"
 ERROR_COLOR = "#ef4444"
@@ -15,6 +16,19 @@ class SVIFlaskApp:
         self.base_dir = base_dir or os.path.dirname(__file__)
         self.config_file = os.path.join(self.base_dir, "config.json")
         self.data_file = os.path.join(self.base_dir, "data.json")
+
+        # Logger
+        self.logger = AppLogger(
+            name="sviflask_log",
+            log_dir=os.path.join(self.base_dir, "logs"),
+            max_bytes=10 * 1024 * 1024,
+            backup_count=5,
+            log_level=DEBUG,
+            console_output=True,
+            use_colored_console=True
+        )
+
+        self.logger.info("Starting SVI Flask App")
 
         self.system_running = False
 
@@ -49,6 +63,7 @@ class SVIFlaskApp:
                 lgpio.gpio_claim_input(self.h, pin, lgpio.SET_ACTIVE_LOW)
             for pin in [self.BUZZER, self.LED_RESET]:
                 lgpio.gpio_claim_output(self.h, pin, 1)
+        self.logger.info("GPIO initialized")
 
     def led_reset_on(self): lgpio.gpio_write(self.h, self.LED_RESET, 0)
     def led_reset_off(self): lgpio.gpio_write(self.h, self.LED_RESET, 1)
@@ -68,22 +83,29 @@ class SVIFlaskApp:
         if not os.path.exists(self.config_file):
             with open(self.config_file, "w") as f:
                 json.dump({"alarm_delay":0.0433, "expire_delay":0.0833, "dark_mode":True}, f, indent=4)
+            self.logger.info("Created default config.json")
+
         if not os.path.exists(self.data_file):
             with open(self.data_file, "w") as f:
                 json.dump([], f, indent=4)
+            self.logger.info("Created default data.json")
 
-    def load_json(self, file, default): 
-        try: 
+    def load_json(self, file, default):
+        try:
             with open(file) as f: return json.load(f)
-        except: 
+        except Exception as e:
+            self.logger.error(f"Failed to load JSON {file}: {e}")
             return default
 
     def load_config(self): return self.load_json(self.config_file, {})
     def save_config(self, data):
         with open(self.config_file, "w") as f: json.dump(data, f, indent=4)
+        self.logger.debug("Config saved")
+
     def load_data(self): return self.load_json(self.data_file, [])
     def save_data(self, data):
         with open(self.data_file, "w") as f: json.dump(data, f, indent=4)
+        self.logger.debug("Data saved")
 
     # ---------------- Threads ----------------
     def monitor_buttons(self):
@@ -93,33 +115,38 @@ class SVIFlaskApp:
 
     def monitor_alarm(self):
         while True:
-            lots = self.load_data()
-            sensor = self.read_sensor()
-            has_alarm = lots and lots[0].get("isalarm") is None
-            is_expire = lots and lots[0]['status'] in ["Alarm","Expired"]
-            sensor_alarm = sensor in ["Empty","Low"]
+            try:
+                lots = self.load_data()
+                sensor = self.read_sensor()
+                has_alarm = lots and lots[0].get("isalarm") is None
+                is_expire = lots and lots[0]['status'] in ["Alarm","Expired"]
+                sensor_alarm = sensor in ["Empty","Low"]
 
-            if self.system_running and has_alarm and (sensor_alarm or is_expire):
-                self.led_reset_on()
-            else:
-                self.led_reset_off()
-                self.alarm_off()
+                if self.system_running and has_alarm and (sensor_alarm or is_expire):
+                    self.led_reset_on()
+                    self.alarm_on()
+                else:
+                    self.led_reset_off()
+                    self.alarm_off()
 
-            if self.system_running and self.is_reset_btn_press():
+                if self.system_running and self.is_reset_btn_press():
+                    time.sleep(0.5)
+                    if self.is_reset_btn_press():
+                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        for lot in lots:
+                            if lot.get("isalarm") is None:
+                                lot["isalarm"] = now_str
+                        self.save_data(lots)
+                        self.logger.info("Alarm reset by user")
                 time.sleep(0.5)
-                if self.is_reset_btn_press():
-                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    for lot in lots:
-                        if lot.get("isalarm") is None:
-                            lot["isalarm"] = now_str
-                    self.save_data(lots)
-
-            time.sleep(0.5)
+            except Exception as e:
+                self.logger.error(f"Alarm monitor error: {e}")
 
     def serial_reader(self):
         while True:
             try:
                 ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+                self.logger.info("Serial scanner connected")
                 buffer = ""
                 while True:
                     if ser.in_waiting:
@@ -137,9 +164,11 @@ class SVIFlaskApp:
                                 self.last_scan_time = now
                                 with self.scanner_lock:
                                     self.scanner_data = lot
+                                self.logger.info(f"Scanned: {lot}")
+                            buffer = ""
                     time.sleep(0.05)
             except Exception as e:
-                print("Serial error:", e)
+                self.logger.error(f"Serial error: {e}")
                 time.sleep(2)
 
     # ---------------- Routes ----------------
@@ -151,6 +180,7 @@ class SVIFlaskApp:
                 if mtime != self.last_mtime:
                     self.app.config.update(self.load_config())
                     self.last_mtime = mtime
+                    self.logger.debug("Config reloaded")
             except:
                 pass
 
@@ -160,7 +190,87 @@ class SVIFlaskApp:
         @self.app.route("/api/system_status")
         def system_status(): return {"running": self.system_running}
 
-        # Add other Flask routes here (scan, settings, lots...) similarly
+        @self.app.route("/api/sensor")
+        def api_sensor():
+            if not self.system_running:
+                return {"status":"System disconnected"}
+            return {"status": self.read_sensor()}
+
+        @self.app.route("/api/settings")
+        def api_settings():
+            config = self.load_config()
+            return {
+                "alarm_delay": config.get("alarm_delay"),
+                "expire_delay": config.get("expire_delay"),
+                "dark_mode": config.get("dark_mode")
+            }
+
+        @self.app.route("/save_settings", methods=["POST"])
+        def save_settings():
+            try:
+                data = request.json
+                self.save_config(data)
+                self.app.config.update(data)
+                return {"status":"✅ Settings saved","status_color":SUCCESS_COLOR}
+            except Exception as e:
+                self.logger.error(f"Save settings error: {e}")
+                return {"status":f"Error: {e}","status_color":ERROR_COLOR}
+
+        @self.app.route("/api/scan")
+        def api_scan():
+            with self.scanner_lock:
+                lot = self.scanner_data
+                self.scanner_data = ""
+
+            if not self.system_running:
+                return {"lot": None, "status":"System disconnected","status_color":ERROR_COLOR}
+
+            if not lot:
+                return {"lot": None}
+
+            if self.read_sensor() != "Full":
+                return {"lot": None, "status": f"{lot} Lost Magnet","status_color":ERROR_COLOR}
+
+            lots = self.load_data()
+            if any(l["lot"]==lot for l in lots):
+                return {"lot": lot,"status": f"⚠️ Lot {lot} already exists","status_color":ERROR_COLOR}
+
+            now = datetime.now()
+            config = self.load_config()
+            alarm_minutes = config.get("alarm_delay",0)*60
+            expire_minutes = config.get("expire_delay",0)*60
+
+            new_lot = {
+                "lot": lot,
+                "alarm": (now+timedelta(minutes=alarm_minutes)).strftime("%Y-%m-%d %H:%M:%S"),
+                "expire": (now+timedelta(minutes=expire_minutes)).strftime("%Y-%m-%d %H:%M:%S"),
+                "isalarm": None
+            }
+
+            lots.insert(0,new_lot)
+            self.save_data(lots)
+            self.logger.info(f"Lot {lot} saved")
+
+            return {"lot": lot,"status": f"✅ Lot {lot} saved","status_color":SUCCESS_COLOR}
+
+        @self.app.route("/delete_lot", methods=["POST"])
+        def delete_lot():
+            try:
+                data = request.get_json()
+                lot_to_delete = data.get("lot")
+                lots = self.load_data()
+                lots = [lot for lot in lots if lot["lot"] != lot_to_delete]
+                self.save_data(lots)
+                self.logger.info(f"Lot {lot_to_delete} deleted")
+                return {"status": f"Lot {lot_to_delete} deleted","status_color":SUCCESS_COLOR}
+            except Exception as e:
+                self.logger.error(f"Delete lot error: {e}")
+                return {"status":f"Error: {e}","status_color":ERROR_COLOR}
+
+        @self.app.route("/api/lots")
+        def api_lots():
+            lots = self.load_data()
+            return self.process_lots(lots)
 
     # ---------------- Utilities ----------------
     def process_lots(self, lots):
@@ -168,11 +278,11 @@ class SVIFlaskApp:
         for lot in lots:
             alarm_time = datetime.strptime(lot["alarm"], "%Y-%m-%d %H:%M:%S")
             expire_time = datetime.strptime(lot["expire"], "%Y-%m-%d %H:%M:%S")
-            diff = max(0,int((expire_time - now).total_seconds()))
+            diff = max(0,int((expire_time-now).total_seconds()))
             lot["remain_text"] = f"{diff//60}m {diff%60:02d}s"
-            if now >= expire_time: lot["status"] = "Expired"
-            elif now >= alarm_time: lot["status"] = "Alarm"
-            else: lot["status"] = "Active"
+            if now>=expire_time: lot["status"]="Expired"
+            elif now>=alarm_time: lot["status"]="Alarm"
+            else: lot["status"]="Active"
         return lots
 
     # ---------------- Run ----------------
@@ -181,9 +291,10 @@ class SVIFlaskApp:
         threading.Thread(target=self.monitor_buttons, daemon=True).start()
         threading.Thread(target=self.monitor_alarm, daemon=True).start()
         self.app.config.update(self.load_config())
+        self.logger.info("Flask app running on 0.0.0.0:5001")
         self.app.run(host="0.0.0.0", port=5001, use_reloader=False)
 
 
-if __name__ == "__main__":
+if __name__=="__main__":
     app_instance = SVIFlaskApp()
     app_instance.run()
