@@ -57,27 +57,29 @@ def monitor_alarm():
             lots = load_data()
             lots = process_lots(lots)
 
-            has_alarm = any(
-                lot["status"] in ["Alarm", "Expired"] and lot.get("isalarm") is None
-                for lot in lots
-            )
+            has_alarm = False
+            is_expire = False
+            sensor_alarm = False
+            if lots:
+                has_alarm = lots[0].get("isalarm") is None
+                is_expire = lots[0]['status'] in ["Alarm", "Expired"]
 
             sensor = read_sensor()
             sensor_alarm = sensor in ["Empty", "Low"]
 
-            if system_running and (has_alarm or sensor_alarm):
+            if system_running and has_alarm and (sensor_alarm or is_expire):
                 # alarm_on()
                 led_reset_on()
             else:
                 alarm_off()
                 led_reset_off()
 
-            if is_reset_btn_press():
+            if system_running and is_reset_btn_press():
                 time.sleep(0.5)
-                if is_reset_btn_press():
+                if system_running and is_reset_btn_press():
                     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     for lot in lots:
-                        if lot.get("isalarm") is None and lot["status"] in ["Alarm", "Expired"]:
+                        if lot.get("isalarm") is None:
                             lot["isalarm"] = now_str
                     save_data(lots)
 
