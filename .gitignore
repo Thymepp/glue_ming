@@ -1,2 +1,10 @@
-config.json 
-data.json 
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+*.log
+logs/
+
+config.json
+data.json

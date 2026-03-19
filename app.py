@@ -432,6 +432,7 @@ if __name__ == "__main__":
     reload_config_if_changed()
 
     threading.Thread(target=serial_reader, daemon=True).start()
+
     threading.Thread(target=monitor_buttons, daemon=True).start()
     threading.Thread(target=monitor_alarm, daemon=True).start()
 
