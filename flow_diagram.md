@@ -1,7 +1,7 @@
 ```mermaid
 flowchart TD
     %% Scanner Input
-    A[Serial Scanner (/dev/ttyACM0)] -->|Scan Lot| B[serial_reader Thread]
+    A[Serial Scanner /dev/ttyACM0] -->|Scan Lot| B[serial_reader Thread]
     B -->|Deduplicate & Lock| C[Shared scanner_data]
 
     %% Flask API Scan
@@ -16,16 +16,16 @@ flowchart TD
 
     %% GPIO Threads
     subgraph GPIO
-        L[Start Button (BUTTON_START)] --> M[monitor_buttons Thread]
+        L[Start Button BUTTON_START] --> M[monitor_buttons Thread]
         M -->|Update system_running| N[System Running Flag]
         
-        O[Reset Button (BUTTON_RESET)] --> P[monitor_alarm Thread]
+        O[Reset Button BUTTON_RESET] --> P[monitor_alarm Thread]
         P -->|Check system_running & lot status| Q{Is alarm/expired?}
         Q -->|Yes| R[Turn on LED_RESET & BUZZER]
         Q -->|No| S[Turn off LED_RESET & BUZZER]
         P -->|Reset button pressed| T[Mark lot.isalarm with timestamp]
         
-        U[Sensor Pins (Empty/Low/Full)] --> P
+        U[Sensor Pins Empty/Low/Full] --> P
         P -->|Read sensor| Q
     end
 
@@ -47,9 +47,9 @@ flowchart TD
 
     %% Cleanup & Exit
     subgraph Cleanup
-        Z[Signal SIGINT / SIGTERM or exit] --> ZA[cleanup()]
+        Z[Signal SIGINT / SIGTERM or exit] --> ZA[cleanup]
         ZA -->|Turn off BUZZER & LED| ZB[Release GPIO]
-        ZA -->|Close application| ZC[os._exit(0)]
+        ZA -->|Close application| ZC[os._exit0]
     end
 
     %% Styling
