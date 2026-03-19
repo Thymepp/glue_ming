@@ -230,23 +230,13 @@ class SVIFlaskApp:
             if not lot:
                 return {"lot": None}
             
-            # ----------- SVI Validation -----------
-            try:
-                svi_client = SVIClient(username="YOUR_USER", password="YOUR_PASS")
-                if not svi_client.authenticate():
-                    self.logger.error("SVI auth failed")
-                    return {"lot": lot, "status":"SVI auth failed","status_color":ERROR_COLOR}
-
-                # Example: validate lot via SVI (assuming save_assembly or a validate method)
-                # Here we just check if the lot can be saved
-                res = svi_client.save_assembly(wo="default", sn=lot, opname="scan", operator_id="1")
-                if res is None or res.status_code != 200:
-                    self.logger.warning(f"SVI validation failed for lot {lot}: {res.text if res else 'No response'}")
-                    return {"lot": lot, "status":"Lot failed SVI validation","status_color":ERROR_COLOR}
-            except Exception as e:
-                self.logger.error(f"SVI validation error: {e}")
-                return {"lot": lot, "status":f"SVI error: {e}","status_color":ERROR_COLOR}
-            # -------------------------------------
+            is_valid, error_msg = self.validate_lot_with_svi(lot)
+            if not is_valid:
+                return {
+                    "lot": lot,
+                    "status": error_msg,
+                    "status_color": ERROR_COLOR
+                }
 
             if self.read_sensor() != "Full":
                 return {"lot": None, "status": f"{lot} Lost Magnet or sensor not FULL","status_color":ERROR_COLOR}
@@ -304,6 +294,32 @@ class SVIFlaskApp:
             elif now>=alarm_time: lot["status"]="Alarm"
             else: lot["status"]="Active"
         return lots
+
+    def validate_lot_with_svi(self, lot: str, wo="default", opname="scan", operator_id="1"):
+        """
+        Validate a lot using SVIClient.
+        Returns (True, None) if valid, (False, error_message) if failed.
+        """
+        try:
+            svi_client = SVIClient(username="YOUR_USER", password="YOUR_PASS")
+            if not svi_client.authenticate():
+                msg = "SVI authentication failed"
+                self.logger.error(msg)
+                return False, msg
+
+            res = svi_client.save_assembly(wo=wo, sn=lot, opname=opname, operator_id=operator_id)
+            if res is None or res.status_code != 200:
+                msg = f"SVI validation failed: {res.text if res else 'No response'}"
+                self.logger.warning(msg)
+                return False, msg
+
+            self.logger.info(f"SVI validation passed for lot {lot}")
+            return True, None
+
+        except Exception as e:
+            msg = f"SVI validation error: {e}"
+            self.logger.error(msg)
+            return False, msg
 
     # ---------------- Run ----------------
     def run(self):
