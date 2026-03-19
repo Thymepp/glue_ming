@@ -3,6 +3,8 @@ import json
 import time
 import threading
 from datetime import datetime, timedelta
+import atexit
+import signal
 from flask import Flask, render_template, request, jsonify
 import serial
 import lgpio
@@ -50,6 +52,11 @@ class SVIFlaskApp:
         self.last_scan_time = 0
 
         self.last_mtime = 0
+
+        atexit.register(self.cleanup)
+        # signal
+        signal.signal(signal.SIGTERM, self.handle_exit)
+        signal.signal(signal.SIGINT, self.handle_exit)
 
         # Flask app
         self.app = Flask(__name__)
@@ -229,7 +236,7 @@ class SVIFlaskApp:
 
             if not lot:
                 return {"lot": None}
-            
+
             is_valid, error_msg = self.validate_lot_with_svi(lot)
             if not is_valid:
                 return {
@@ -320,6 +327,22 @@ class SVIFlaskApp:
             msg = f"SVI validation error: {e}"
             self.logger.error(msg)
             return False, msg
+
+    def cleanup(self):
+        try:
+            if self.h:
+                self.alarm_off()
+                self.led_reset_off()
+                lgpio.gpiochip_close(self.h)
+                self.logger.info("GPIO cleaned up")
+                self.h = None
+        except Exception as e:
+            self.logger.error(f"Cleanup error: {e}")
+
+    def handle_exit(self, signum, frame):
+        self.logger.info(f"Shutting down (signal {signum})...")
+        self.cleanup()
+        os._exit(0)
 
     # ---------------- Run ----------------
     def run(self):
