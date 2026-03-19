@@ -96,7 +96,7 @@ class SVIFlaskApp:
         try:
             with open(file) as f: return json.load(f)
         except Exception as e:
-            self.logger.error(f"Failed to load JSON {file}: {e}")
+            # self.logger.error(f"Failed to load JSON {file}: {e}")
             return default
 
     def load_config(self): return self.load_json(self.config_file, {})
@@ -301,7 +301,7 @@ class SVIFlaskApp:
         Returns (True, None) if valid, (False, error_message) if failed.
         """
         try:
-            svi_client = SVIClient(username="YOUR_USER", password="YOUR_PASS")
+            svi_client = SVIClient(username="LDL_ASSEMBLY", password="1NmNf425l2")
             if not svi_client.authenticate():
                 msg = "SVI authentication failed"
                 self.logger.error(msg)
