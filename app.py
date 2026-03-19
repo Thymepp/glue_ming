@@ -15,7 +15,7 @@ from SVIClient import SVIClient
 SUCCESS_COLOR = "#16a34a"
 ERROR_COLOR = "#ef4444"
 
-class SVIFlaskApp:
+class SVIAXCGlueApp:
     def __init__(self, base_dir=None):
         self.base_dir = base_dir or os.path.dirname(__file__)
         self.config_file = os.path.join(self.base_dir, "config.json")
@@ -23,7 +23,7 @@ class SVIFlaskApp:
 
         # Logger
         self.logger = AppLogger(
-            name="sviflask_log",
+            name="sviaxcglueapp_log",
             log_dir=os.path.join(self.base_dir, "logs"),
             max_bytes=10 * 1024 * 1024,
             backup_count=5,
@@ -355,5 +355,5 @@ class SVIFlaskApp:
 
 
 if __name__=="__main__":
-    app_instance = SVIFlaskApp()
+    app_instance = SVIAXCGlueApp()
     app_instance.run()
