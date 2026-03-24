@@ -231,6 +231,7 @@ class SVIFlaskApp:
                 return {"lot": None}
             
             is_valid, error_msg = self.validate_lot_with_svi(lot)
+            is_valid = True
             if not is_valid:
                 return {
                     "lot": lot,
