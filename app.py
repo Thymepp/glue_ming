@@ -119,6 +119,7 @@ class SVIFlaskApp:
         while True:
             try:
                 lots = self.load_data()
+                lots = self.process_lots(lots)
                 sensor = self.read_sensor()
                 has_alarm = lots and lots[0].get("isalarm") is None
                 is_expire = lots and lots[0]['status'] in ["Alarm","Expired"]
