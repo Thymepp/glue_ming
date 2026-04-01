@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import socket
 import threading
 from datetime import datetime, timedelta
 import atexit
@@ -10,7 +11,6 @@ import serial
 import lgpio
 from rotating_logger import AppLogger, DEBUG
 
-from SVIClient import SVIClient
 
 SUCCESS_COLOR = "#16a34a"
 ERROR_COLOR = "#ef4444"
@@ -48,6 +48,7 @@ class SVIAXCGlueApp:
         # Scanner
         self.scanner_data = ""
         self.scanner_lock = threading.Lock()
+        self.data_lock = threading.Lock()
         self.last_scan = ""
         self.last_scan_time = 0
 
@@ -146,7 +147,8 @@ class SVIAXCGlueApp:
                         for lot in lots:
                             if lot.get("isalarm") is None:
                                 lot["isalarm"] = now_str
-                        self.save_data(lots)
+                        with self.data_lock:
+                            self.save_data(lots)
                         self.logger.info("Alarm reset by user")
                 time.sleep(0.5)
             except Exception as e:
@@ -181,6 +183,73 @@ class SVIAXCGlueApp:
                 self.logger.error(f"Serial error: {e}")
                 time.sleep(2)
 
+    # ---------------- Server ----------------
+    def socket_listener(self, host="0.0.0.0", port=5000):
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        try:
+            server.bind((host, port))
+            server.listen(5)
+            self.logger.info(f"Socket server listening on {host}:{port}")
+
+            while True:
+                client, addr = server.accept()
+                self.logger.info(f"Client connected: {addr}")
+
+                threading.Thread(
+                    target=self.handle_client,
+                    args=(client, addr),
+                    daemon=True
+                ).start()
+
+        except Exception as e:
+            self.logger.error(f"Socket server error: {e}")
+
+    def handle_client(self, client, addr):
+        try:
+            data = client.recv(4096)
+            if not data:
+                return
+
+            message = data.decode("utf-8")
+            self.logger.info(f"Received from {addr}: {message}")
+
+            try:
+                parsed = json.loads(message)
+
+                glue_data = parsed.get("Glue_Data", {})
+                part_no = glue_data.get("P/N")
+                wo = glue_data.get("Workorder")
+                dt = glue_data.get("Date&Time")
+
+                self.logger.info(f"Parsed -> P/N: {part_no}, WO: {wo}, Time: {dt}")
+
+                # ✅ LOCK HERE
+                with self.data_lock:
+                    lots = self.load_data()
+
+                    if any(l["lot"] == part_no for l in lots):
+                        self.logger.warning(f"Duplicate lot: {part_no}")
+                        return
+
+                    new_entry = {
+                        "lot": part_no,
+                        "wo": wo,
+                        "timestamp": dt,
+                        "isalarm": None
+                    }
+
+                    lots.insert(0, new_entry)
+                    self.save_data(lots)
+
+            except json.JSONDecodeError:
+                self.logger.error("Invalid JSON received")
+
+        except Exception as e:
+            self.logger.error(f"Client handling error: {e}")
+        finally:
+            client.close()
     # ---------------- Routes ----------------
     def setup_routes(self):
         @self.app.before_request
@@ -238,48 +307,25 @@ class SVIAXCGlueApp:
             if not lot:
                 return {"lot": None}
 
-            is_valid, error_msg = self.validate_lot_with_svi(lot)
-            is_valid = True
-            if not is_valid:
-                return {
-                    "lot": lot,
-                    "status": error_msg,
-                    "status_color": ERROR_COLOR
-                }
-
             if self.read_sensor() != "Full":
                 return {"lot": None, "status": f"{lot} Lost Magnet or sensor not FULL","status_color":ERROR_COLOR}
 
-            lots = self.load_data()
-            if any(l["lot"]==lot for l in lots):
-                return {"lot": lot,"status": f"⚠️ Lot {lot} already exists","status_color":ERROR_COLOR}
+            with self.data_lock:
+                lots = self.load_data()
+                if any(l["lot"] == lot for l in lots):
+                    return {"lot": lot,"status": f"⚠️ Lot {lot} already exists","status_color":ERROR_COLOR}
 
-            now = datetime.now()
-            config = self.load_config()
-            alarm_minutes = config.get("alarm_delay",0)*60
-            expire_minutes = config.get("expire_delay",0)*60
-
-            new_lot = {
-                "lot": lot,
-                "alarm": (now+timedelta(minutes=alarm_minutes)).strftime("%Y-%m-%d %H:%M:%S"),
-                "expire": (now+timedelta(minutes=expire_minutes)).strftime("%Y-%m-%d %H:%M:%S"),
-                "isalarm": None
-            }
-
-            lots.insert(0,new_lot)
-            self.save_data(lots)
-            self.logger.info(f"Lot {lot} saved")
-
-            return {"lot": lot,"status": f"✅ Lot {lot} saved","status_color":SUCCESS_COLOR}
+            return {"lot": lot,"status": f"✅ Lot {lot} recived","status_color":SUCCESS_COLOR}
 
         @self.app.route("/delete_lot", methods=["POST"])
         def delete_lot():
             try:
                 data = request.get_json()
                 lot_to_delete = data.get("lot")
-                lots = self.load_data()
-                lots = [lot for lot in lots if lot["lot"] != lot_to_delete]
-                self.save_data(lots)
+                with self.data_lock:
+                    lots = self.load_data()
+                    lots = [lot for lot in lots if lot["lot"] != lot_to_delete]
+                    self.save_data(lots)
                 self.logger.info(f"Lot {lot_to_delete} deleted")
                 return {"status": f"Lot {lot_to_delete} deleted","status_color":SUCCESS_COLOR}
             except Exception as e:
@@ -288,7 +334,8 @@ class SVIAXCGlueApp:
 
         @self.app.route("/api/lots")
         def api_lots():
-            lots = self.load_data()
+            with self.data_lock:
+                lots = self.load_data()
             return self.process_lots(lots)
 
     # ---------------- Utilities ----------------
@@ -303,32 +350,6 @@ class SVIAXCGlueApp:
             elif now>=alarm_time: lot["status"]="Alarm"
             else: lot["status"]="Active"
         return lots
-
-    def validate_lot_with_svi(self, lot: str, wo="default", opname="scan", operator_id="1"):
-        """
-        Validate a lot using SVIClient.
-        Returns (True, None) if valid, (False, error_message) if failed.
-        """
-        try:
-            svi_client = SVIClient(username="LDL_ASSEMBLY", password="1NmNf425l2")
-            if not svi_client.authenticate():
-                msg = "SVI authentication failed"
-                self.logger.error(msg)
-                return False, msg
-
-            res = svi_client.save_assembly(wo=wo, sn=lot, opname=opname, operator_id=operator_id)
-            if res is None or res.status_code != 200:
-                msg = f"SVI validation failed: {res.text if res else 'No response'}"
-                self.logger.warning(msg)
-                return False, msg
-
-            self.logger.info(f"SVI validation passed for lot {lot}")
-            return True, None
-
-        except Exception as e:
-            msg = f"SVI validation error: {e}"
-            self.logger.error(msg)
-            return False, msg
 
     def cleanup(self):
         try:
@@ -351,6 +372,9 @@ class SVIAXCGlueApp:
         threading.Thread(target=self.serial_reader, daemon=True).start()
         threading.Thread(target=self.monitor_buttons, daemon=True).start()
         threading.Thread(target=self.monitor_alarm, daemon=True).start()
+
+        threading.Thread(target=self.socket_listener, daemon=True).start()
+
         self.app.config.update(self.load_config())
         self.logger.info("Flask app running on 0.0.0.0:5001")
         self.app.run(host="0.0.0.0", port=5001, use_reloader=False)
