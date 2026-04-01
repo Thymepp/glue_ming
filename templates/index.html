@@ -362,6 +362,16 @@
 ">
                     SENSOR: --
                 </div>
+                <div id="socketStatus" style="
+    padding:8px 14px;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:600;
+    background:#1c232b;
+    color:#9ca3af;
+">
+    SOCKET: --
+</div>
                 <button class="btn-settings" onclick="toggleSettings()">⚙ Settings</button>
             </div>
 
@@ -552,6 +562,28 @@
         }
         setInterval(updateSensorStatus, 1000)
         updateSensorStatus()
+
+        function updateSocketStatus() {
+            fetch("/api/socket_status")
+                .then(r => r.json())
+                .then(data => {
+
+                    let el = document.getElementById("socketStatus")
+
+                    if (data.socket_server === "online") {
+                        el.innerText = "SOCKET ONLINE"
+                        el.style.background = "#053d2e"
+                        el.style.color = "#00ffa6"
+                    } else {
+                        el.innerText = "SOCKET OFFLINE"
+                        el.style.background = "#3a0f12"
+                        el.style.color = "#ff5c5c"
+                    }
+
+                })
+        }
+        setInterval(updateSocketStatus, 1000)
+        updateSocketStatus()
 
         /* SAVE SETTINGS */
 

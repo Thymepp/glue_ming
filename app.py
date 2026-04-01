@@ -35,6 +35,7 @@ class SVIAXCGlueApp:
         self.logger.info("Starting SVI Flask App")
 
         self.system_running = False
+        self.socket_server_running = False
 
         # GPIO
         self.CHIP = 0
@@ -191,19 +192,30 @@ class SVIAXCGlueApp:
         try:
             server.bind((host, port))
             server.listen(5)
+
+            self.socket_server_running = True
             self.logger.info(f"Socket server listening on {host}:{port}")
 
             while True:
-                client, addr = server.accept()
-                self.logger.info(f"Client connected: {addr}")
+                try:
+                    client, addr = server.accept()
 
-                threading.Thread(
-                    target=self.handle_client,
-                    args=(client, addr),
-                    daemon=True
-                ).start()
+                    self.socket_server_running = True
+                    self.logger.info(f"Client connected: {addr}")
+
+                    threading.Thread(
+                        target=self.handle_client,
+                        args=(client, addr),
+                        daemon=True
+                    ).start()
+
+                except Exception as e:
+                    self.socket_server_running = False
+                    self.logger.error(f"Accept error: {e}")
+                    time.sleep(1)
 
         except Exception as e:
+            self.socket_server_running = False
             self.logger.error(f"Socket server error: {e}")
 
     def handle_client(self, client, addr):
@@ -225,7 +237,6 @@ class SVIAXCGlueApp:
 
                 self.logger.info(f"Parsed -> P/N: {part_no}, WO: {wo}, Time: {dt}")
 
-                # ✅ LOCK HERE
                 with self.data_lock:
                     lots = self.load_data()
 
@@ -268,6 +279,13 @@ class SVIAXCGlueApp:
 
         @self.app.route("/api/system_status")
         def system_status(): return {"running": self.system_running}
+
+        @self.app.route("/api/socket_status")
+        def socket_status():
+            return {
+                "socket_server": "online" if self.socket_server_running else "offline",
+                "port": 5000
+            }
 
         @self.app.route("/api/sensor")
         def api_sensor():
