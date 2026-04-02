@@ -709,7 +709,6 @@
             })
         }
 
-        // 🔌 SERIAL SCANNER POLLING
         let scanning = false;
 
         function pollScanner() {
@@ -772,7 +771,6 @@
 
                     data.forEach(lot => {
 
-                        // count status (from backend)
                         if (lot.status === "Active") active++
                         else if (lot.status === "Alarm") alarm++
                         else if (lot.status === "Expired") expired++
@@ -785,7 +783,6 @@
                         // remain color same as status
                         let remainClass = statusClass
 
-                        // icon
                         let alarmIcon = '<i class="fa-solid fa-bell"></i>';
 
                         if (lot) {
