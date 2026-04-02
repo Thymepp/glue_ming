@@ -111,7 +111,7 @@ class SVIAXCGlueApp:
     def load_config(self): return self.load_json(self.config_file, {})
     def save_config(self, data):
         with open(self.config_file, "w") as f: json.dump(data, f, indent=4)
-        self.logger.debug("Config saved")
+        self.logger.debug(f"Config saved {data=}")
 
     def load_data(self): return self.load_json(self.data_file, [])
     def save_data(self, data):
@@ -127,30 +127,37 @@ class SVIAXCGlueApp:
     def monitor_alarm(self):
         while True:
             try:
-                lots = self.load_data()
-                lots = self.process_lots(lots)
-                sensor = self.read_sensor()
-                has_alarm = lots and lots[0].get("isalarm") is None
-                is_expire = lots and lots[0]['status'] in ["Alarm","Expired"]
-                sensor_alarm = sensor in ["Empty","Low"]
+                if self.system_running:
+                    lots = self.load_data()
+                    lots = self.process_lots(lots)
 
-                if self.system_running and has_alarm and (sensor_alarm or is_expire):
-                    self.led_reset_on()
-                    self.alarm_on()
-                else:
-                    self.led_reset_off()
-                    self.alarm_off()
+                    sensor = self.read_sensor()
 
-                if self.system_running and self.is_reset_btn_press():
-                    time.sleep(0.5)
-                    if self.is_reset_btn_press():
-                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        for lot in lots:
-                            if lot.get("isalarm") is None:
-                                lot["isalarm"] = now_str
-                        with self.data_lock:
-                            self.save_data(lots)
-                        self.logger.info("Alarm reset by user")
+                    lot = next((lot for lot in lots if lot["is_activate"] != "Not activate"), None)
+
+                    alarm_low = lot and (not lot.get("is_alarm_or_low", False) and (sensor == "Low" or lot.get("status") == "Alarm"))
+                    alarm_empty = lot and (not lot.get("is_expire_or_empty", False) and (sensor == "Empty" or lot.get("status") == "Expired"))
+
+                    if alarm_low or alarm_empty:
+                        self.led_reset_on()
+                        # self.alarm_on()
+                    else:
+                        self.led_reset_off()
+                        # self.alarm_off()
+
+                    if self.is_reset_btn_press() and (alarm_low or alarm_empty):
+                        time.sleep(0.5)
+                        if self.is_reset_btn_press() and (alarm_low or alarm_empty):
+                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            if alarm_low:
+                                lot["is_alarm_or_low"] = now_str
+                                self.logger.info(f"Alarm or Low reset {lot=} {now_str}")
+                            if alarm_empty:
+                                lot["is_expire_or_empty"] = now_str
+                                self.logger.info(f"Expire or empty reset {lot=} {now_str}")
+                            with self.data_lock:
+                                self.save_data(lots)
+                            self.logger.info("Alarm reset by user")
                 time.sleep(0.5)
             except Exception as e:
                 self.logger.error(f"Alarm monitor error: {e}")
@@ -224,11 +231,18 @@ class SVIAXCGlueApp:
             if not data:
                 return
 
-            message = data.decode("utf-8")
-            self.logger.info(f"Received from {addr}: {message}")
+            # message = data.decode("utf-8")
+            # self.logger.info(f"Received from {addr}: {message}")
 
             try:
-                parsed = json.loads(message)
+                # parsed = json.loads(message)
+                parsed = {
+    "Glue_Data": {
+        "Workorder": "WO456",
+        "P/N": "ABC123",
+        "Date&Time": "2026-04-01 14:30:00"
+    }
+}
 
                 glue_data = parsed.get("Glue_Data", {})
                 part_no = glue_data.get("P/N")
@@ -245,14 +259,21 @@ class SVIAXCGlueApp:
                         return
 
                     new_entry = {
-                        "lot": part_no,
-                        "wo": wo,
                         "timestamp": dt,
-                        "isalarm": None
+                        "wo": wo,
+                        "lot": part_no,
+                        "status": "Active",
+                        "is_activate": "Not activate",
+                        "remain_text": "Not activate",
+                        "is_alarm_or_low": None,
+                        "is_expire_or_empty": None,
+                        "alarm": "-",
+                        "expire": "-"
                     }
 
                     lots.insert(0, new_entry)
                     self.save_data(lots)
+                    self.logger.info(f"insert 0 {new_entry=}")
 
             except json.JSONDecodeError:
                 self.logger.error("Invalid JSON received")
@@ -282,16 +303,11 @@ class SVIAXCGlueApp:
 
         @self.app.route("/api/socket_status")
         def socket_status():
-            return {
-                "socket_server": "online" if self.socket_server_running else "offline",
-                "port": 5000
-            }
+            return {"socket_server": "online" if self.socket_server_running else "offline", "port": 5000}
 
         @self.app.route("/api/sensor")
         def api_sensor():
-            if not self.system_running:
-                return {"status":"System disconnected"}
-            return {"status": self.read_sensor()}
+            return {"status": "System disconnected"} if not self.system_running else {"status": self.read_sensor()}
 
         @self.app.route("/api/settings")
         def api_settings():
@@ -317,6 +333,7 @@ class SVIAXCGlueApp:
         def api_scan():
             with self.scanner_lock:
                 lot = self.scanner_data
+                # lot = "ABC123"
                 self.scanner_data = ""
 
             if not self.system_running:
@@ -330,10 +347,26 @@ class SVIAXCGlueApp:
 
             with self.data_lock:
                 lots = self.load_data()
-                if any(l["lot"] == lot for l in lots):
-                    return {"lot": lot,"status": f"⚠️ Lot {lot} already exists","status_color":ERROR_COLOR}
+                latest_lot = lots[0] if lots else {}
+                if latest_lot.get("lot") == lot:
+                    if latest_lot.get("is_activate") == "Not activate":
+                        latest_lot["is_activate"] = "Activate"
+                        latest_lot["remain_text"] = "Activate"
+                        now = datetime.now()
+                        config = self.load_config()
+                        alarm_minutes = config.get("alarm_delay",0)*60
+                        expire_minutes = config.get("expire_delay",0)*60
 
-            return {"lot": lot,"status": f"✅ Lot {lot} recived","status_color":SUCCESS_COLOR}
+                        latest_lot["alarm"] = (now+timedelta(minutes=alarm_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+                        latest_lot["expire"] = (now+timedelta(minutes=expire_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+
+                        self.save_data(lots)
+                        self.logger.info(f"Activate {latest_lot=}")
+                        return {"lot": lot, "status": f"Lot {lot} received", "status_color": SUCCESS_COLOR}
+
+                    return {"lot": lot, "status": f"Lot {lot} already activated", "status_color": SUCCESS_COLOR}
+
+                return {"lot": lot, "status": f"Lot {lot} is not latest", "status_color": ERROR_COLOR}
 
         @self.app.route("/delete_lot", methods=["POST"])
         def delete_lot():
@@ -360,13 +393,14 @@ class SVIAXCGlueApp:
     def process_lots(self, lots):
         now = datetime.now()
         for lot in lots:
-            alarm_time = datetime.strptime(lot["alarm"], "%Y-%m-%d %H:%M:%S")
-            expire_time = datetime.strptime(lot["expire"], "%Y-%m-%d %H:%M:%S")
-            diff = max(0,int((expire_time-now).total_seconds()))
-            lot["remain_text"] = f"{diff//60}m {diff%60:02d}s"
-            if now>=expire_time: lot["status"]="Expired"
-            elif now>=alarm_time: lot["status"]="Alarm"
-            else: lot["status"]="Active"
+            if lot["is_activate"] == "Activate":
+                alarm_time = datetime.strptime(lot["alarm"], "%Y-%m-%d %H:%M:%S")
+                expire_time = datetime.strptime(lot["expire"], "%Y-%m-%d %H:%M:%S")
+                diff = max(0,int((expire_time-now).total_seconds()))
+                lot["remain_text"] = f"{diff//60}m {diff%60:02d}s"
+                if now>=expire_time: lot["status"]="Expired"
+                elif now>=alarm_time: lot["status"]="Alarm"
+                else: lot["status"]="Active"
         return lots
 
     def cleanup(self):

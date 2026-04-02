@@ -786,9 +786,15 @@
                         let remainClass = statusClass
 
                         // icon
-                        let alarmIcon = lot.isalarm
-                            ? '<i class="fa-solid fa-bell"></i> <i class="fa-solid fa-check"></i>'
-                            : '<i class="fa-solid fa-bell"></i>';
+                        let alarmIcon = '<i class="fa-solid fa-bell"></i>';
+
+                        if (lot) {
+                            if (lot.is_alarm_or_low) {
+                                alarmIcon += ' <i class="fa-solid fa-exclamation"></i>';
+                            } else if (lot.is_expire_or_empty) {
+                                alarmIcon += ' <i class="fa-solid fa-check"></i>';
+                            }
+                        }
 
                         html += `
 <tr class="lot-row" data-status="${lot.status}">
