@@ -788,7 +788,8 @@
                         if (lot) {
                             if (lot.is_alarm_or_low) {
                                 alarmIcon += ' <i class="fa-solid fa-exclamation"></i>';
-                            } else if (lot.is_expire_or_empty) {
+                            }
+                            if (lot.is_expire_or_empty) {
                                 alarmIcon += ' <i class="fa-solid fa-check"></i>';
                             }
                         }

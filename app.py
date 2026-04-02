@@ -105,7 +105,7 @@ class SVIAXCGlueApp:
         try:
             with open(file) as f: return json.load(f)
         except Exception as e:
-            self.logger.error(f"Failed to load JSON {file}: {e}")
+            # self.logger.error(f"Failed to load JSON {file}: {e}")
             return default
 
     def load_config(self): return self.load_json(self.config_file, {})
